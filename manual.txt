@@ -1,0 +1,193 @@
+==============================================================================
+BEDIENUNGSANLEITUNG & PROJEKTDOKUMENTATION
+Projekt: ESPHome Cannabis Monitor (Garten & Indoor)
+Hardware: LILYGO T-Higrow ESP32 (V1.1 mit DHT11 & BH1750)
+Skript-Version: 4.3.0 (Stabil)
+==============================================================================
+
+Diese Dokumentation beschreibt die Einrichtung, Funktionsweise und präzise
+Kalibrierung des LILYGO T-Higrow Sensorboards zur Überwachung kritischer
+Boden- und Klimaparameter in der Pflanzenzucht.
+
+------------------------------------------------------------------------------
+INHALTSVERZEICHNIS
+------------------------------------------------------------------------------
+1. Systemarchitektur & Funktionsweise
+2. Erstkonfiguration & Sicherheitskonzept (Secrets)
+3. Schritt-für-Schritt Anleitung zur Inbetriebnahme
+4. Ausführlicher Leitfaden zur Sensor-Kalibrierung
+5. Deep-Sleep-Logik & Wartungsmodus
+6. Fehlerbehebung (Troubleshooting)
+
+==============================================================================
+1. SYSTEMARCHITEKTUR & FUNKTIONSWEISE
+==============================================================================
+Das Skript ist modular aufgebaut, um Stabilität und einfache Wartung zu
+garantieren. Es gliedert sich in folgende logische Einheiten:
+
+* Modul 1 (Substitutions): Zentrales Dashboard für alle Variablen, Netzwerk-
+  parameter und Kalibrierungswerte.
+* Modul 2 (System): Regelt die Boot-Prioritäten und die Deep-Sleep-Schleife.
+* Modul 3 (Netzwerk): Verwaltet WLAN (inkl. Fallback), IP-Konfiguration, Webserver,
+  die native API sowie den MQTT-Broker.
+* Modul 4 (Steuerung): Virtuelle und physische Schalter (Wach bleiben, Kalibrierung).
+* Modul 5 (Sensoren): Erfassung und Filterung (Median-Filter) der analogen und
+  digitalen Sensorwerte (Feuchte, EC, Temp, Hum, Lux) sowie die Berechnung
+  von Zusatzwerten (Taupunkt, absolute Feuchte und VPD).
+* Modul 6 (Text-Sensoren): Linguistische Übersetzung von Rohdaten in klare
+  Zustandsberichte (z. B. "Zu trocken", "Ideal für Wachstumsphase").
+* Modul 7 (Logging): Intervallgesteuertes Debug-Logging für die Kalibrierung.
+
+==============================================================================
+2. ERSTKONFIGURATION & SICHERHEITSKONZEPT (SECRETS)
+==============================================================================
+Um den Quellcode sicher auf Plattformen wie GitHub veröffentlichen zu können,
+verwendet dieses Skript eine strikte Geheimnis-Trennung via "!secret". Alle
+sensiblen Zugangsdaten werden in einer separaten Datei namens 'secrets.yaml'
+gespeichert, welche NIEMALS hochgeladen werden darf (Eintrag in .gitignore!).
+
+Erstelle vor dem ersten Kompilieren im selben Verzeichnis eine Datei namens
+'secrets.yaml' mit folgendem Inhalt und passe die Werte an:
+
+wifi_ssid: "Dein_WLAN_Name"
+wifi_password: "Dein_WLAN_Passwort"
+wifi_bssid: "AA:BB:CC:DD:EE:FF"  # Optionale MAC deines Routers für schnellen Connect
+manual_static_ip: "192.168.178.88"
+manual_gateway: "192.168.178.1"
+manual_subnet: "255.255.255.0"
+manual_dns1: "192.168.178.1"
+manual_dns2: "8.8.8.8"
+api_encryption_key: "Ein_32_Byte_Base64_Schluessel="
+mqtt_broker: "IP_deines_Home_Assistant_oder_MQTT_Brokers"
+
+api encryption key erstellen:
+openssl rand -base64 32
+
+==============================================================================
+3. SCHRITT-FÜR-SCHRITT ANLEITUNG ZUR INBETRIEBNAHME
+==============================================================================
+
+führen Sie die folgenden Befehle aus:
+
+Überprüfen Sie die Syntax und die korrekte Einbindung der Secrets:
+esphome config t-higrow-final.yaml
+
+Verbinden Sie den LILYGO T-Higrow per USB-Kabel mit Ihrem Computer.
+
+Kompilieren und flashen Sie das Skript:
+esphome run t-higrow-final.yaml
+
+Wählen Sie im Terminal den erkannten USB-Port (z.B. /dev/ttyUSB0). Nach dem
+Flashen startet das Board neu und beginnt mit der Übertragung.
+
+==============================================================================
+4. AUSFÜHRLICHER LEITFADEN ZUR SENSOR-KALIBRIERUNG
+==============================================================================
+
+Die analogen Eingänge des ESP32 neigen zu Streuungen. Um exakte Prozentwerte
+für die Bodenfeuchte und präzise mS/cm-Werte für den Düngergehalt (EC) zu
+erhalten, müssen die Rohwerte (Spannung in Volt) individuell ermittelt werden.
+
+Hierzu wurde in Modul 7 ein dedizierter Live-Kalibrierungsmodus integriert.
+
+SCHRITT A: Kalibrierungsmodus aktivieren
+Öffnen Sie das Webinterface des Sensors über die vergebene IP-Adresse im Browser
+oder beobachten Sie das Log im Terminal (esphome logs t-higrow-final.yaml).
+
+Aktivieren Sie den virtuellen Schalter: "System: Kalibrierungsmodus (Rohwerte)".
+
+Das Skript blockiert nun die normalen Berechnungen (gibt 'NAN' an Home
+Assistant weiter) und wirft alle 2 Sekunden die unbefleckten Volt-Rohwerte
+der Sensoren direkt im Log aus:
+--> "--- KALIBRIERUNG AKTIV --- Feuchte: X.XXX V | EC-Wert: Y.YYY V"
+
+SCHRITT B: Bodenfeuchtigkeit (Kapazitiver Sensor - Pin 32)
+TROCKENWERT (0%): Halten Sie das Board vollkommen trocken in die Luft.
+Notieren Sie den angezeigten Volt-Wert bei 'Feuchte' im Log (z. B. 2.80 V).
+
+NASSWERT (100%): Tauchen Sie die Sensor-Spitze (bis zur maximalen Eintauchtiefe,
+nicht die Elektronik oben!) in ein Glas Wasser. Notieren Sie den Volt-Wert
+sobald er stagniert (z. B. 1.60 V).
+
+Öffnen Sie die t-higrow-final.yaml und tragen Sie die Werte in Modul 1 ein:
+soil_moist_raw_dry: "DEIN_TROCKENWERT"
+soil_moist_raw_wet: "DEIN_NASSWERT"
+
+SCHRITT C: Düngergehalt / Elektrische Leitfähigkeit (EC - Pin 34)
+Der EC-Sensor verwendet ein hochpräzises 5-Punkt-Kurven-Mapping (Linear-Stückelung),
+da die Leitfähigkeit in Erde nicht rein linear verläuft.
+
+Punkt 0 (0.0 mS/cm): Sensor trocken in der Luft oder in reinem destilliertem/
+Regenwasser betreiben. Notiere den Wert (Standard: 0.14 V) -> soil_ec_raw_p0.
+
+Punkt 1 bis 3 (Reale Messung oder Annäherung):
+
+Tipp für die Praxis: Nutze bekannte Erdmischungen im nassen Zustand.
+Anzuchterde hat ca. 0.8 mS/cm, gut gedüngte Gartenerde ca. 1.5 mS/cm.
+
+Alternativ können die Volt-Rohwerte im Log bei realen Bedingungen im
+Garten beobachtet und schrittweise angepasst werden.
+
+Punkt 4 (Maximalwert - 5.0 mS/cm): Sensor in eine gesättigte Kochsalzlösung
+tauchen. Der maximale Ausschlag in Volt wird notiert (Standard: 0.55 V)
+-> soil_ec_raw_p4.
+
+Nachdem alle Werte in Modul 1 angepasst wurden, flashen Sie das Board erneut
+mittels esphome run t-higrow-final.yaml. Deaktivieren Sie danach den
+Kalibrierungsmodus wieder, um die echten Prozent- und mS/cm-Berechnungen freizugeben.
+
+==============================================================================
+5. DEEP-SLEEP-LOGIK & WARTUNGSMODUS
+==============================================================================
+
+Um im Akkubetrieb (18650 Zelle) eine maximale Laufzeit von mehreren Monaten zu
+erreichen, nutzt das Board die Deep-Sleep-Funktion:
+
+Nach dem Booten bleibt das Board für 20 Sekunden aktiv (initial_boot_delay_ms).
+
+In dieser Zeit verbindet es sich mit dem WLAN, synchronisiert die Uhrzeit via
+SNTP, liest die Sensoren aus und sendet die Daten via MQTT / API.
+
+Sind alle Bedingungen erfüllt (MQTT verbunden, kein Wartungsmodus aktiv),
+versetzt sich der ESP32 für 15 Minuten (deep_sleep_duration) in den Tiefschlaf.
+
+WICHTIG FÜR UPDATES (Wartungsmodus)
+Da das Board im Tiefschlaf über WLAN nicht erreichbar ist, müssen Sie für Updates
+oder Änderungen (OTA) den Deep Sleep blockieren:
+
+Aktivieren Sie im Webinterface oder via Home Assistant den Schalter:
+"System: Wach bleiben (Deep Sleep)"
+
+Solange dieser Schalter aktiv ist (oder der Kalibrierungsmodus läuft), wird
+die Deep-Sleep-Anweisung im Loop übersprungen und das Board bleibt dauerhaft online.
+
+Sollte das Board bereits schlafen, drücken Sie den physischen "Wake-Taster"
+(Pin 35) auf dem Board, um es manuell zu wecken, und aktivieren Sie sofort
+den "Wach bleiben"-Schalter im Webinterface.
+
+==============================================================================
+6. FEHLERBEHEBUNG (TROUBLESHOOTING)
+==============================================================================
+
+Fehler: Sensorwerte für Licht (BH1750) fehlen oder zeigen "NAN"
+Ursache: Der I2C-Bus blockiert, wenn die Sensoren beim Booten zu spät Strom
+erhalten.
+Lösung: Modul 2 regelt dies über die Boot-Priorität 1200. Der Pin 4 (Sensor-Power)
+wird explizit vor der I2C-Initialisierung eingeschaltet. Prüfen Sie, ob
+sensor_power_pin im Skript korrekt auf "4" steht.
+
+Fehler: Akkuladestand zeigt dauerhaft 100% oder unplausible Werte
+Ursache: Die Lithium-Ionen-Entladekurve ist nicht linear. Spannungen über
+4.20V signalisieren ein angeschlossenes Ladegerät.
+Lösung: Kalibrieren Sie die Werte 3.51 (0%) und 4.20 (100%) in Modul 5
+nach, falls Sie einen Akku mit anderer Nennspannung nutzen.
+
+Fehler: Das Gerät geht im Garten nicht in den Deep Sleep
+Ursache: In Modul 2 ist definiert, dass eine aktive und stehende MQTT-Verbindung
+(mqtt.connected) zwingend erforderlich ist, um den Schlafmodus sicher zu
+betreten. Bricht das WLAN im Garten ab und MQTT trennt sich, bleibt das Board
+wach und sucht den Connect, was den Akku leert.
+Lösung: Platzieren Sie einen WLAN-Repeater näher am Garten oder definieren Sie
+die BSSID in Modul 1 fest, um langwierige Suchen nach anderen Frequenzen
+zu unterbinden.
+==============================================================================
