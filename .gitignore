@@ -1,0 +1,18 @@
+# ESPHome Build-Verzeichnisse und Cache
+.esphome/
+build/
+.pio/
+.pioenvs/
+
+# Sensible Daten (falls du Passwörter in separate Dateien auslagerst)
+secrets.yaml
+private.yaml
+
+# Betriebssystem-Dateien
+.DS_Store
+Thumbs.db
+
+# Entwicklungs-Tools
+.vscode/
+.idea/
+*.log
