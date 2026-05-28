@@ -1,11 +1,20 @@
 # ==============================================================================
 # PROJEKT: Cannabis Monitor (Garten/Indoor)
 # HARDWARE: LILYGO T-Higrow ESP32 (V1.1 / DHT11)
-# VERSION: 4.3.0
+# VERSION: 4.6.1
 # BESCHREIBUNG:
+#  + Automatische Deep-Sleep-Blockierung bei angeschlossenem Ladegerät (> 4.3V)
+#  + Dynamischer Temperatur-Offset (-0.1°C im Akkubetrieb / +4.5°C im Netzbetrieb)
 #  + Kalibrierung hinzugefügt
 #  * Rohwerte werden nun elegant via Intervall-Schleife
 #    direkt in die Web-Konsole geloggt.
+#  + Traffic-Reduktion: Extrem sauberer Median-Filter (1 Update/Minute via MQTT)
+#  + Spam-Schutz für Uhrzeit- und Uptime-Sensoren integriert
+#  * ÄNDERUNG (v4.6.0): Event-Driven Kaskade! Template/Text-Sensoren pollen nicht
+#    mehr selbst (update_interval: never), sondern werden synchron via "on_value"
+#    von den Hardware-Sensoren getriggert. Garantiert Werte im 20s Akku-Fenster!
+#  * FEHLERBEHEBUNG (v4.6.1): "Couldn't find ID" Parse-Fehler behoben, indem
+#    Updates über C++ Lambdas ausgelöst werden (umgeht die strenge YAML-Reihenfolge).
 # ==============================================================================
 
 substitutions:
@@ -16,6 +25,9 @@ substitutions:
   # Netzwerkkonfiguration
   devicename: "t-higrow-garten"
   friendly_name: "Garten Monitor"
+  # ============================================================================
+  # hier ausschneiden
+  # ============================================================================
   wifi_ssid: !secret wifi_ssid
   wifi_password: !secret wifi_password
   # Trage hier die MAC-Adresse deines Garten-Zugrifffspunktes ein, um den Connect extrem zu beschleunigen (Format: "AA:BB:CC:DD:EE:FF")
@@ -27,18 +39,35 @@ substitutions:
   manual_subnet: !secret manual_subnet
   manual_dns1: !secret manual_dns1
   manual_dns2: !secret manual_dns2
+  # neuen Key mit "openssl rand -base64 32" erstellem.
   api_encryption_key: !secret api_encryption_key
   mqtt_broker: !secret mqtt_broker
+  # ============================================================================
+  # bis hier ausschneiden
+  # diesen teil in die neue "secrets.yaml" datei einfügen und durch die
+  # jeweils gültigen werte des eigenen Setup ersetzen
+  # ============================================================================
 
   # Hardware & Timing
   sensor_power_pin: "4"
   initial_boot_delay_ms: "20000"
   deep_sleep_duration: "15min"
-  med_samples_1s: "4"
-  med_samples_2s: "3"
+
+  # Filter-Logik: 1-Sekunden-Sensoren (Boden, Akku, WLAN)
+  # Sammelt 31 Werte, sendet den ersten nach 5s (für Akku), danach alle 60s (Dauerbetrieb)
+  med_1s_window: "31"
+  med_1s_send_first: "5"
+  med_1s_send_every: "60"
+
+  # Filter-Logik: 2-Sekunden-Sensoren (Klima, Licht)
+  # Sammelt 15 Werte, sendet den ersten nach 6s (für Akku), danach alle 60s (Dauerbetrieb)
+  med_2s_window: "15"
+  med_2s_send_first: "3"
+  med_2s_send_every: "30"
 
   # Sensor-Kalibrierung: DHT11
-  temp_offset: "-0.1" # Korrektur Sensorenabwärme je länger in betrieb, je höher der wert bis maximal 5°
+  temp_offset_battery: "-0.1" # Korrektur Sensorenabwärme im Akkubetrieb
+  temp_offset_powered: "-4.5" # Erhöhte Korrektur bei dauerhafter Stromversorgung
   temp_min: "-20.0"
   temp_max: "60.0"
   hum_min: "5.0"
@@ -81,6 +110,17 @@ substitutions:
   light_veg: "2500"
   light_flower: "7000"
 
+  # NEU: Globale Variablen für die dynamische Laufzeitanpassung
+globals:
+  - id: current_temp_offset
+    type: float
+    restore_value: no
+    initial_value: '${temp_offset_battery}'
+  - id: is_powered
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
 # ==============================================================================
 # MODUL 2: SYSTEM & GRUNDKONFIGURATION
 # ==============================================================================
@@ -112,12 +152,14 @@ esphome:
   on_loop:
     then:
       # Prüft, ob das Gerät verbunden ist, Deep Sleep erlaubt ist und die Mindestlaufzeit erreicht wurde
+      # ÄNDERUNG: Deep Sleep wird jetzt zusätzlich blockiert, wenn 'is_powered' auf true steht (Ladegerät angeschlossen)
       - if:
           condition:
             and:
               - mqtt.connected:
               - switch.is_off: block_deep_sleep
               - switch.is_off: calibration_mode # Verhindert Deep Sleep während der Kalibrierung
+              - lambda: 'return !id(is_powered);' # Verhindert Deep Sleep bei dauerhafter Stromversorgung
               # Nutzt den echten Hardware-Timer (millis) statt des Uptime-Sensors
               - lambda: 'return millis() > ${initial_boot_delay_ms};'
           then:
@@ -188,6 +230,10 @@ time:
     servers:
       - "192.168.178.1"
       - "0.pool.ntp.org"
+    # Garantiert, dass die Uhrzeit sofort nach dem Sync via WLAN gepusht wird (wichtig für Akkumodus)
+    on_time_sync:
+      then:
+        - lambda: 'id(text_letztes_update).update();'
 
 i2c:
   sda: 25
@@ -268,14 +314,13 @@ sensor:
     attenuation: 12db
     unit_of_measurement: "%"
     device_class: moisture
+    # Triggert den Text-Sensor genau dann, wenn der Hardware-Wert frisch gefiltert gesendet wird
+    on_value:
+      then:
+        - lambda: 'id(text_boden_status).update();'
     filters:
       - filter_out: .nan
-      # Einfacher Median-Filter, der einen stabilen Wert sendet.
-      - median:
-          window_size: ${med_samples_1s}
-          send_every: ${med_samples_1s}
-          send_first_at: ${med_samples_1s}
-      # Kalibrierung der Rohwerte in Prozent
+      # Nutzt im Dauerbetrieb eine gleitende Auswertung basierend auf dem Status
       - lambda: |-
           if (id(calibration_mode).state) {
             return NAN;
@@ -287,6 +332,11 @@ sensor:
             if (percent > 100.0) percent = 100.0;
             return percent;
           }
+      # Einfacher Median-Filter, der einen stabilen Wert sendet.
+      - median:
+          window_size: ${med_1s_window}
+          send_every: ${med_1s_send_every}
+          send_first_at: ${med_1s_send_first}
 
   # Analoger Sensor für die elektrische Leitfähigkeit des Bodens (Düngergehalt)
   - platform: adc
@@ -298,13 +348,12 @@ sensor:
     attenuation: 12db
     unit_of_measurement: "mS/cm"
     device_class: conductivity
+    # ÄNDERUNG: Kaskaden-Trigger für Dünger Index
+    on_value:
+      then:
+        - lambda: 'id(text_duenger_index).update();'
     filters:
       - filter_out: .nan
-      # Filter vereinfacht für schnellere Datenübertragung
-      - median:
-          window_size: ${med_samples_1s}
-          send_every: ${med_samples_1s}
-          send_first_at: ${med_samples_1s}
       - lambda: |-
           if (id(calibration_mode).state) {
             return NAN;
@@ -324,6 +373,10 @@ sensor:
           }
       - clamp:
           min_value: 0.0
+      - median:
+          window_size: ${med_1s_window}
+          send_every: ${med_1s_send_every}
+          send_first_at: ${med_1s_send_first}
 
   # --- KLIMASENSOREN ---
   # Temperatur- und Luftfeuchtigkeitssensor (On-Board)
@@ -334,22 +387,28 @@ sensor:
       name: "Klima: 1 Temperatur"
       id: dht_temp
       icon: "mdi:thermometer"
+      # Temperatur triggert alle Klima-Templates, da Temp/Hum zeitgleich gelesen werden
+      on_value:
+        then:
+          - lambda: |-
+              id(taupunkt_value).update();
+              id(vpd_value).update();
+              id(abs_hum_value).update();
       filters:
-        # 1. Fehlerhafte Werte blockieren
+        # Fehlerhafte Werte blockieren
         - filter_out: .nan
-        # 2. Korrektur der Gehäuse-Abwärme
-        - offset: ${temp_offset}
-        # 3. Unrealistische Ausreißer blockieren
+        # ÄNDERUNG: Nutzt den dynamischen, globalen Offset (Akkumodus vs. Dauerstrom)
+        - lambda: "return x + id(current_temp_offset);"
         - lambda: |-
             if (x < ${temp_min} || x > ${temp_max}) {
               return {};
             }
             return x;
-        # 4. Median-Filter über die sauberen Werte
+        # Median-Filter über die sauberen Werte
         - median:
-            window_size: ${med_samples_2s}
-            send_every: ${med_samples_2s}
-            send_first_at: ${med_samples_2s}
+            window_size: ${med_2s_window}
+            send_every: ${med_2s_send_every}
+            send_first_at: ${med_2s_send_first}
     humidity:
       name: "Klima: 2 Luftfeuchtigkeit (relativ)"
       id: dht_hum
@@ -365,9 +424,9 @@ sensor:
             return x;
         # 3. Median-Filter über die sauberen Werte
         - median:
-            window_size: ${med_samples_2s}
-            send_every: ${med_samples_2s}
-            send_first_at: ${med_samples_2s}
+            window_size: ${med_2s_window}
+            send_every: ${med_2s_send_every}
+            send_first_at: ${med_2s_send_first}
     # Das minimal mögliche Intervall des DHT11 Sensors
     update_interval: 2s
 
@@ -378,13 +437,16 @@ sensor:
     icon: "mdi:brightness-5"
     address: 0x23
     update_interval: 2s
+    on_value:
+      then:
+        - lambda: 'id(text_licht_status).update();'
     filters:
       - filter_out: .nan
       # Filter vereinfacht
       - median:
-          window_size: ${med_samples_2s}
-          send_every: ${med_samples_2s}
-          send_first_at: ${med_samples_2s}
+          window_size: ${med_2s_window}
+          send_every: ${med_2s_send_every}
+          send_first_at: ${med_2s_send_first}
       # Kalibrierfaktor für das Garten-Gehäuse
       - multiply: 1.0
     unit_of_measurement: "lx"
@@ -393,9 +455,11 @@ sensor:
 # Berechnet den Taupunkt (ab welcher Temperatur bildet sich Kondenswasser/Schimmelgefahr?)
   - platform: template
     name: "Klima: 6 Taupunkt"
+    id: taupunkt_value
     icon: "mdi:water-thermometer"
     unit_of_measurement: "°C"
-    update_interval: 5s
+    # ÄNDERUNG: Polling abgestellt
+    update_interval: never
     filters:
       - filter_out: .nan
     lambda: |-
@@ -414,7 +478,11 @@ sensor:
     id: vpd_value
     icon: "mdi:leaf-circle-outline"
     unit_of_measurement: "kPa"
-    update_interval: 5s
+    update_interval: never
+    # ÄNDERUNG: VPD Kaskade -> Wenn VPD neu berechnet ist, triggere direkt den Text-Status dazu
+    on_value:
+      then:
+        - lambda: 'id(text_vpd_status).update();'
     filters:
       - filter_out: .nan
     lambda: |-
@@ -428,9 +496,10 @@ sensor:
 # Berechnet den Luftfeuchtigkeitswert absolut)
   - platform: template
     name: "Klima: 3 Luftfeuchtigkeit (absolut)"
+    id: abs_hum_value
     icon: "mdi:water"
     unit_of_measurement: "g/m³"
-    update_interval: 5s
+    update_interval: never
     filters:
       - filter_out: .nan
     lambda: |-
@@ -450,15 +519,19 @@ sensor:
     icon: "mdi:sine-wave"
     update_interval: 1s
     attenuation: 12db
+    # Kaskaden-Trigger
+    on_value:
+      then:
+        - lambda: 'id(text_akku_zustand).update();'
     filters:
       - filter_out: .nan
       # Hardware-Spannungsteiler auf dem Board erfordert Multiplikator
       - multiply: 2.0
       # Schnellere Filterung
       - median:
-          window_size: ${med_samples_1s}
-          send_every: ${med_samples_1s}
-          send_first_at: ${med_samples_1s}
+          window_size: ${med_1s_window}
+          send_every: ${med_1s_send_every}
+          send_first_at: ${med_1s_send_first}
 
 # Virtueller Sensor zur Umrechnung der Akkuspannung in Prozent
   - platform: copy
@@ -477,16 +550,22 @@ sensor:
       - clamp:
           min_value: 0.0
           max_value: 100.0
-      - median:
-          window_size: ${med_samples_1s}
-          send_every: ${med_samples_1s}
-          send_first_at: ${med_samples_1s}
+      # Median entfernt, da Quelle bereits U/min liefert. Ein weiterer Median würde die Ausgabe verzögern.
 
 # Laufzeitüberwachung vor dem Deep Sleep
   - platform: uptime
     name: "System: 10 Betriebszeit"
     id: system_uptime
+    # Uptime nutzt nun auch den Median-Filter für saubere Synchronisation!
     update_interval: 1s
+    on_value:
+      then:
+        - lambda: 'id(text_letztes_update).update();'
+    filters:
+      - median:
+          window_size: ${med_1s_window}
+          send_every: ${med_1s_send_every}
+          send_first_at: ${med_1s_send_first}
 
 # WLAN Diagnosesensor
   - platform: wifi_signal
@@ -496,9 +575,9 @@ sensor:
     filters:
       # Medianfilter hinzugefügt
       - median:
-          window_size: ${med_samples_1s}
-          send_every: ${med_samples_1s}
-          send_first_at: ${med_samples_1s}
+          window_size: ${med_1s_window}
+          send_every: ${med_1s_send_every}
+          send_first_at: ${med_1s_send_first}
 
 # Zeigt den noch freien Arbeitsspeicher des ESP32 an
   - platform: debug
@@ -533,8 +612,10 @@ text_sensor:
 
   - platform: template
     name: "System: 04 Hostname"
+    id: text_hostname
     icon: "mdi:computer"
     entity_category: diagnostic
+    update_interval: never
     lambda: |-
       return {"${devicename}"};
 
@@ -548,8 +629,10 @@ text_sensor:
   # Ein benutzerdefinierter Text-Sensor, der die Sensordaten auswertet
   - platform: template
     name: "Boden: 2 Status"
+    id: text_boden_status
     icon: "mdi:sprout"
-    update_interval: 5s
+    # Keine Selbstaktualisierung mehr. Wird durch soil_moisture getriggert.
+    update_interval: never
     lambda: |-
       if (id(calibration_mode).state) return {"KALIBRIERUNG AKTIV"}; // Status-Hinweis im Textsensor
       if (isnan(id(soil_moisture).state)) return {"Sensorfehler"};
@@ -561,8 +644,9 @@ text_sensor:
   # Die klare Text-Auswertung für deinen VPD-Wert
   - platform: template
     name: "Klima: 8 VPD Status (Phase)"
+    id: text_vpd_status
     icon: "mdi:cannabis"
-    update_interval: 5s
+    update_interval: never
     lambda: |-
       if (isnan(id(vpd_value).state)) return {"Fehler / Keine Daten"};
       float v = id(vpd_value).state;
@@ -576,9 +660,10 @@ text_sensor:
   # Gibt die aktuelle Uhrzeit aus
   - platform: template
     name: "System: 11 Letztes Update"
+    id: text_letztes_update
     icon: "mdi:clock-check-outline"
     entity_category: diagnostic
-    update_interval: 1s
+    update_interval: never
     lambda: |-
       auto time = id(sntp_time).now();
       if (time.is_valid()) {
@@ -590,8 +675,9 @@ text_sensor:
 
   - platform: template
     name: "Boden: 4 Duenger-Index (EC)"
+    id: text_duenger_index
     icon: "mdi:flask-outline"
-    update_interval: 1s
+    update_interval: never
     lambda: |-
       if (id(calibration_mode).state) return {"KALIBRIERUNG AKTIV"}; // Status-Hinweis im Textsensor
       if (isnan(id(soil_ec).state)) return {"Fehler"};
@@ -602,8 +688,9 @@ text_sensor:
 
   - platform: template
     name: "Klima: 5 Licht-Status"
+    id: text_licht_status
     icon: "mdi:white-balance-sunny"
-    update_interval: 5s
+    update_interval: never
     lambda: |-
       if (isnan(id(light_lux).state)) return {"Fehler"};
       float lux = id(light_lux).state;
@@ -613,20 +700,29 @@ text_sensor:
       if (lux < ${light_flower}) return {"Intensiv (Blütephase)"};
       return {"Lichtstress / Sehr extrem!"};
 
+  # Auswertung steuert hier aktiv die Systemvariablen für den Dauerstrombetrieb um!
   - platform: template
     name: "Energie: 1 Akku Zustand"
+    id: text_akku_zustand
     entity_category: diagnostic
     icon: "mdi:battery-alert-variant-outline"
-    update_interval: 5s
+    update_interval: never
     lambda: |-
       if (isnan(id(battery_voltage).state)) return {"Fehler"};
       float v = id(battery_voltage).state;
-      if (v > 4.3) return {"Ladegerät angeschlossen"};
-      if (v > 4.0) return {"Vollständig geladen"};
-      if (v > 3.7) return {"Gut"};
-      if (v > 3.6) return {"Bald nachladen"};
-      if (v > 3.5) return {"falsche Sensordaten"};
-      return {"Kritisch leer!"};
+      if (v > 4.3) {
+        id(current_temp_offset) = ${temp_offset_powered};
+        id(is_powered) = true;
+        return {"Ladegerät angeschlossen"};
+      } else {
+        id(current_temp_offset) = ${temp_offset_battery};
+        id(is_powered) = false;
+        if (v > 4.0) return {"Vollständig geladen"};
+        if (v > 3.7) return {"Gut"};
+        if (v > 3.6) return {"Bald nachladen"};
+        if (v > 3.5) return {"falsche Sensordaten"};
+        return {"Kritisch leer!"};
+      }
 
 # ==============================================================================
 # MODUL 7: INTERVALL-ROUTINEN (LOGGING)
