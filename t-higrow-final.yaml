@@ -39,7 +39,7 @@ substitutions:
   manual_subnet: !secret manual_subnet
   manual_dns1: !secret manual_dns1
   manual_dns2: !secret manual_dns2
-  # neuen Key mit "openssl rand -base64 32" erstellem.
+  # neuen Key mit "openssl rand -base64 32" erstellen.
   api_encryption_key: !secret api_encryption_key
   mqtt_broker: !secret mqtt_broker
   # ============================================================================
