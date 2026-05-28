@@ -1,30 +1,30 @@
----
-name: 🐛 Bug Report / Fehlerbeschreibung
-about: Erstelle einen Bericht, um uns zu helfen, den Code zu verbessern.
-title: '[BUG] Kurze Beschreibung des Fehlers'
-labels: bug
-assignees: ''
+## 📝 Beschreibung
+Eine kurze Beschreibung der Änderungen oder des neu hinzugefügten Features. 
 
----
+*(z. B. Umstellung der Template-Sensoren auf C++ Lambdas zur Behebung von ID-Parse-Fehlern)*
 
-**Beschreibung des Fehlers**
-Eine klare und prägnante Beschreibung des Problems.
+## 🏷️ Versions-Update
+- **Alte Version:** vX.X.X
+- **Neue Version:** vX.X.X
 
-**ESPHome Version**
-- Version (z. B. 2026.4.0):
+## 🛠️ Betroffene Module / Komponenten
+Bitte ankreuzen, welche Bereiche der Konfiguration geändert wurden:
+- [ ] MODUL 1: Variablen & Schwellenwerte (Substitutions)
+- [ ] MODUL 2: System & Grundkonfiguration (Deep Sleep, Boot)
+- [ ] MODUL 3: Netzwerk & Schnittstellen (WLAN, MQTT, API)
+- [ ] MODUL 4: Steuerung (Schalter & Buttons)
+- [ ] MODUL 5: Physische & berechnete Sensoren
+- [ ] MODUL 6: Text-Sensoren & Auswertungen
+- [ ] MODUL 7: Intervall-Routinen (Logging)
 
-**Verwendete Hardware**
-- LilyGo T-Higrow Version (z. B. V1.1 mit DHT11 / BME280):
-- ESP32 Chip-Revision (falls bekannt):
+## ⚙️ Funktionaler Check
+- [ ] `esphome config t-higrow-final.yaml` läuft fehlerfrei durch ("Configuration is valid!").
+- [ ] Der Kompiliervorgang bricht nicht ab.
+- [ ] Das Verhalten im Akkubetrieb (20s-Fenster) wurde berücksichtigt.
+- [ ] Das Verhalten im Dauerbetrieb (Ladegerät angeschlossen) wurde berücksichtigt.
 
-**Schritte zur Reproduktion**
-1. Schalter '...' aktivieren
-2. Sensor in '...' halten
-3. Fehler tritt auf: ...
+## 📊 Test-Log / Validierung
+Bitte hier einen kurzen Ausschnitt aus dem MQTT- oder ESPHome-Log einfügen, der belegt, dass die Sensoren plausibel und im gewünschten Intervall senden:
 
-**Erwartetes Verhalten**
-Eine klare Beschreibung dessen, was stattdessen hätte passieren sollen.
-
-**Auszug aus dem ESPHome-Log (anonymisiert!)**
 ```text
-Bitte füge hier dein relevantes Terminal-Log ein (Achte darauf, WLAN-Namen oder IPs unkenntlich zu machen!)
+// Hier Log-Ausschnitt einfügen
