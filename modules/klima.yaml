@@ -1,0 +1,156 @@
+# ==============================================================================
+# MODUL: KLIMA (Version 4.7.0)
+# Beinhaltet DHT11, BH1750, VPD-Berechnungen und Klima-Textsensoren
+# ==============================================================================
+
+sensor:
+  # --- KLIMASENSOREN ---
+  # Temperatur- und Luftfeuchtigkeitssensor DHT11 (On-Board)
+  - platform: dht
+    pin: 16
+    model: DHT11
+    temperature:
+      name: "Klima: 1 Temperatur"
+      id: dht_temp
+      icon: "mdi:thermometer"
+      # Temperatur triggert alle Klima-Templates, da Temp/Hum zeitgleich gelesen werden
+      on_value:
+        then:
+          - lambda: |-
+              id(taupunkt_value).update();
+              id(vpd_value).update();
+              id(abs_hum_value).update();
+      filters:
+        - filter_out: .nan
+        - lambda: "return x + id(current_temp_offset);"
+        - lambda: |-
+            if (x < ${temp_min} || x > ${temp_max}) {
+              return {};
+            }
+            return x;
+        - median:
+            window_size: ${med_2s_window}
+            send_every: ${med_2s_send_every}
+            send_first_at: ${med_2s_send_first}
+    humidity:
+      name: "Klima: 2 Luftfeuchtigkeit (relativ)"
+      id: dht_hum
+      icon: "mdi:cloud-percent"
+      filters:
+        - filter_out: .nan
+        - lambda: |-
+            if (x < ${hum_min} || x > ${hum_max}) {
+              return {};
+            }
+            return x;
+        - median:
+            window_size: ${med_2s_window}
+            send_every: ${med_2s_send_every}
+            send_first_at: ${med_2s_send_first}
+    # Das minimal mögliche Intervall des DHT11 Sensors
+    update_interval: 2s
+
+  # Digitaler I2C Lichtsensor
+  - platform: bh1750
+    name: "Klima: 4 Lichtintensitaet"
+    id: light_lux
+    icon: "mdi:brightness-5"
+    address: 0x23
+    update_interval: 2s
+    on_value:
+      then:
+        - lambda: 'id(text_licht_status).update();'
+    filters:
+      - filter_out: .nan
+      - median:
+          window_size: ${med_2s_window}
+          send_every: ${med_2s_send_every}
+          send_first_at: ${med_2s_send_first}
+      - multiply: 1.0
+    unit_of_measurement: "lx"
+
+# --- BERECHNETE KLIMA-WERTE ---
+# Berechnet den Taupunkt (ab welcher Temperatur bildet sich Kondenswasser/Schimmelgefahr?)
+  - platform: template
+    name: "Klima: 6 Taupunkt"
+    id: taupunkt_value
+    icon: "mdi:water-thermometer"
+    unit_of_measurement: "°C"
+    update_interval: never
+    filters:
+      - filter_out: .nan
+    lambda: |-
+      if (isnan(id(dht_temp).state) || isnan(id(dht_hum).state)) return NAN;
+      float t = id(dht_temp).state;
+      float h = id(dht_hum).state;
+      float a = 17.271;
+      float b = 237.7;
+      float alpha = ((a * t) / (b + t)) + log(h / 100.0);
+      return (b * alpha) / (a - alpha);
+
+  # Berechnet den VPD (Sättigungsdefizit - Wichtig für die Pflanzenatmung!)
+  - platform: template
+    name: "Klima: 7 VPD (Dampfdruckdefizit)"
+    id: vpd_value
+    icon: "mdi:leaf-circle-outline"
+    unit_of_measurement: "kPa"
+    update_interval: never
+    on_value:
+      then:
+        - lambda: 'id(text_vpd_status).update();'
+    filters:
+      - filter_out: .nan
+    lambda: |-
+      if (isnan(id(dht_temp).state) || isnan(id(dht_hum).state)) return NAN;
+      float t = id(dht_temp).state;
+      float h = id(dht_hum).state;
+      float svp = 0.61078 * exp((17.27 * t) / (t + 237.3));
+      float avp = (svp * h) / 100.0;
+      return svp - avp;
+
+  # Berechnet den Luftfeuchtigkeitswert absolut)
+  - platform: template
+    name: "Klima: 3 Luftfeuchtigkeit (absolut)"
+    id: abs_hum_value
+    icon: "mdi:water"
+    unit_of_measurement: "g/m³"
+    update_interval: never
+    filters:
+      - filter_out: .nan
+    lambda: |-
+      if (isnan(id(dht_temp).state) || isnan(id(dht_hum).state)) return NAN;
+      float t = id(dht_temp).state;
+      float h = id(dht_hum).state;
+      // Formel zur Berechnung der absoluten Feuchte aus Temp und rel. Feuchte
+      return (6.112 * exp((17.67 * t) / (t + 243.5)) * h * 2.1674) / (273.15 + t);
+
+text_sensor:
+  # Die klare Text-Auswertung für deinen VPD-Wert
+  - platform: template
+    name: "Klima: 8 VPD Status (Phase)"
+    id: text_vpd_status
+    icon: "mdi:cannabis"
+    update_interval: never
+    lambda: |-
+      if (isnan(id(vpd_value).state)) return {"Fehler / Keine Daten"};
+      float v = id(vpd_value).state;
+      if (v < ${vpd_low}) return {"Zu niedrig (< " "${vpd_low}" " kPa)"};
+      if (v < ${vpd_ideal_seed}) return {"Ideal für: Stecklinge & Keimung"};
+      if (v <= ${vpd_ideal_veg_early}) return {"Ideal für: Stecklinge & Wachstum"};
+      if (v <= ${vpd_ideal_veg_late}) return {"Ideal für: Wachstumsphase"};
+      if (v <= ${vpd_ideal_flower}) return {"Ideal für: Blütephase"};
+      return {"Zu hoch (Trockenstress!)"};
+
+  - platform: template
+    name: "Klima: 5 Licht-Status"
+    id: text_licht_status
+    icon: "mdi:white-balance-sunny"
+    update_interval: never
+    lambda: |-
+      if (isnan(id(light_lux).state)) return {"Fehler"};
+      float lux = id(light_lux).state;
+      if (lux < ${light_night}) return {"Nacht / Dunkelphase"};
+      if (lux < ${light_seed}) return {"Schwach (Stecklinge/Sämlinge)"};
+      if (lux < ${light_veg}) return {"Optimal für Wachstum (Veg)"};
+      if (lux < ${light_flower}) return {"Intensiv (Blütephase)"};
+      return {"Lichtstress / Sehr extrem!"};

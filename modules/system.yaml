@@ -1,0 +1,159 @@
+# ==============================================================================
+# MODUL: SYSTEM (Version 4.7.0)
+# Beinhaltet Deep Sleep, System-Sensoren (WLAN, RAM, Uptime) und Schalter
+# ==============================================================================
+
+deep_sleep:
+  id: deep_sleep_ctrl
+  sleep_duration: ${deep_sleep_duration}
+  wakeup_pin:
+    number: 35
+    inverted: true
+    allow_other_uses: true
+
+switch:
+  # Virtueller Schalter um den Deep Sleep z.B. für OTA-Updates zu blockieren
+  - platform: template
+    name: "System: Wach bleiben (Deep Sleep)"
+    icon: "mdi:sleep-off"
+    id: block_deep_sleep
+    optimistic: true
+    restore_mode: ALWAYS_OFF
+    entity_category: config
+
+  # Virtueller Schalter für den Kalibrierungsmodus
+  - platform: template
+    name: "System: Kalibrierungsmodus (Rohwerte)"
+    icon: "mdi:compass-rose"
+    id: calibration_mode
+    optimistic: true
+    restore_mode: ALWAYS_OFF
+    entity_category: config
+
+  # Physischer Schalter für die Stromversorgung der Sensoren
+  - platform: gpio
+    pin: ${sensor_power_pin}
+    id: sensor_power
+    name: "System: Stromversorgung Sensor"
+    icon: "mdi:power-settings"
+    restore_mode: ALWAYS_ON
+    entity_category: config
+
+binary_sensor:
+  # Hardware-Taster auf dem Board, weckt den Chip auf
+  - platform: gpio
+    pin:
+      number: 35
+      inverted: true
+      allow_other_uses: true
+    name: "Steuerung: Wake-Taster"
+    entity_category: config
+    icon: "mdi:gesture-tap-button"
+
+button:
+  # Manueller Neustart-Knopf im Webinterface/MQTT
+  - platform: restart
+    name: "Steuerung: Neustart"
+    entity_category: config
+
+# PHYSISCHE & BERECHNETE SENSOREN
+sensor:
+  # Laufzeitüberwachung vor dem Deep Sleep
+  - platform: uptime
+    name: "System: 10 Betriebszeit"
+    id: system_uptime
+    # Uptime nutzt nun auch den Median-Filter für saubere Synchronisation!
+    update_interval: 1s
+    on_value:
+      then:
+        - lambda: 'id(text_letztes_update).update();'
+    filters:
+      - median:
+          window_size: ${med_1s_window}
+          send_every: ${med_1s_send_every}
+          send_first_at: ${med_1s_send_first}
+
+  # WLAN Diagnosesensor
+  - platform: wifi_signal
+    name: "System: 09 WLAN Signalstaerke"
+    icon: "mdi:wifi"
+    update_interval: 1s
+    filters:
+      - median:
+          window_size: ${med_1s_window}
+          send_every: ${med_1s_send_every}
+          send_first_at: ${med_1s_send_first}
+
+  # Zeigt den noch freien Arbeitsspeicher des ESP32 an
+  - platform: debug
+    free:
+      name: "System: 03 Speicher Auslastung (RAM)"
+      entity_category: diagnostic
+      unit_of_measurement: "Bytes"
+      icon: "mdi:memory"
+
+# TEXT SENSOREN & AUSWERTUNGEN
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "System: 06 IP-Adresse"
+      icon: "mdi:ip-network"
+    ssid:
+      name: "System: 07 Verbindung (SSID)"
+      icon: "mdi:router-network"
+    bssid:
+      name: "System: 08 Verbindung (BSSID)"
+      icon: "mdi:access-point-network"
+    mac_address:
+      name: "System: 05 MAC-Adresse"
+      icon: "mdi:chip"
+
+  - platform: version
+    name: "System: 01 ESPHome Version"
+
+  - platform: template
+    name: "System: 04 Hostname"
+    id: text_hostname
+    icon: "mdi:computer"
+    entity_category: diagnostic
+    update_interval: never
+    lambda: |-
+      return {"${devicename}"};
+
+  # Zeigt an, ob das Board regulär aus dem Deep Sleep kam oder per Taster geweckt wurde
+  - platform: debug
+    reset_reason:
+      name: "System: 02 Neustart-Grund"
+      entity_category: diagnostic
+      icon: "mdi:power-cycle"
+
+  # Gibt die aktuelle Uhrzeit aus
+  - platform: template
+    name: "System: 11 Letztes Update"
+    id: text_letztes_update
+    icon: "mdi:clock-check-outline"
+    entity_category: diagnostic
+    update_interval: never
+    lambda: |-
+      auto time = id(sntp_time).now();
+      if (time.is_valid()) {
+        return {time.strftime("%d.%m.%Y %H:%M:%S")};
+      } else {
+        return {"Warte auf Zeit-Sync..."};
+      }
+
+# INTERVALL-ROUTINEN (LOGGING)
+interval:
+  # Loggt die unberührten Volt-Rohwerte der Sensoren direkt in
+  # die Web-Konsole, sobald der Kalibrierungsmodus-Schalter umgelegt wird.
+  - interval: 2s
+    id: calibration_logger
+    then:
+      - if:
+          condition:
+            switch.is_on: calibration_mode
+          then:
+            - logger.log:
+                level: INFO
+                format: "--- KALIBRIERUNG AKTIV --- Feuchte: %.3f V | EC-Wert: %.3f V"
+                args: [ 'id(soil_moisture).get_raw_state()', 'id(soil_ec).get_raw_state()' ]

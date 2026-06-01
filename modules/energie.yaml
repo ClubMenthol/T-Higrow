@@ -1,0 +1,70 @@
+# ==============================================================================
+# MODUL: ENERGIE (Version 4.7.0)
+# Beinhaltet Akkuspannung, prozentuale Berechnung und Ladestatus
+# ==============================================================================
+
+sensor:
+  # --- SYSTEM & ENERGIE ---
+  # Interner ADC für die Überwachung der 18650 Zelle
+  - platform: adc
+    pin: 33
+    name: "Energie: 3 Akku Spannung"
+    entity_category: diagnostic
+    id: battery_voltage
+    icon: "mdi:sine-wave"
+    update_interval: 1s
+    attenuation: 12db
+    on_value:
+      then:
+        - lambda: 'id(text_akku_zustand).update();'
+    filters:
+      - filter_out: .nan
+      # Hardware-Spannungsteiler auf dem Board erfordert Multiplikator
+      - multiply: 2.0
+      - median:
+          window_size: ${med_1s_window}
+          send_every: ${med_1s_send_every}
+          send_first_at: ${med_1s_send_first}
+
+  # Virtueller Sensor zur Umrechnung der Akkuspannung in Prozent
+  - platform: copy
+    source_id: battery_voltage
+    name: "Energie: 2 Akku Ladestand"
+    entity_category: diagnostic
+    icon: "mdi:battery"
+    unit_of_measurement: "%"
+    device_class: battery
+    filters:
+      - filter_out: .nan
+      # Kalibrierung von Spannung zu Prozent (Lithium-Ionen Entladekurve grob angenähert)
+      - calibrate_linear:
+          - 3.51 -> 0.0 # unterhalb dieser Spannung liefern die Sensoren falsche werte
+          - 4.20 -> 100.0
+      - clamp:
+          min_value: 0.0
+          max_value: 100.0
+
+text_sensor:
+  # Auswertung steuert hier aktiv die Systemvariablen für den Dauerstrombetrieb um!
+  - platform: template
+    name: "Energie: 1 Akku Zustand"
+    id: text_akku_zustand
+    entity_category: diagnostic
+    icon: "mdi:battery-alert-variant-outline"
+    update_interval: never
+    lambda: |-
+      if (isnan(id(battery_voltage).state)) return {"Fehler"};
+      float v = id(battery_voltage).state;
+      if (v > 4.3) {
+        id(current_temp_offset) = ${temp_offset_powered};
+        id(is_powered) = true;
+        return {"Ladegerät angeschlossen"};
+      } else {
+        id(current_temp_offset) = ${temp_offset_battery};
+        id(is_powered) = false;
+        if (v > 4.0) return {"Vollständig geladen"};
+        if (v > 3.7) return {"Gut"};
+        if (v > 3.6) return {"Bald nachladen"};
+        if (v > 3.5) return {"falsche Sensordaten"};
+        return {"Kritisch leer!"};
+      }

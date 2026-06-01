@@ -1,0 +1,106 @@
+# ==============================================================================
+# MODUL: BODEN (Version 4.7.0)
+# Beinhaltet Bodenfeuchte und Leitfähigkeit (EC/Dünger)
+# ==============================================================================
+
+sensor:
+  # --- BODENSENSOREN ---
+  # Analoger Sensor für die kapazitive Bodenfeuchte
+  - platform: adc
+    pin: 32
+    name: "Boden: 1 Feuchte"
+    id: soil_moisture
+    icon: "mdi:water-percent"
+    update_interval: 1s
+    attenuation: 12db
+    unit_of_measurement: "%"
+    device_class: moisture
+    # Triggert den Text-Sensor genau dann, wenn der Hardware-Wert frisch gefiltert gesendet wird
+    on_value:
+      then:
+        - lambda: 'id(text_boden_status).update();'
+    filters:
+      - filter_out: .nan
+      # Nutzt im Dauerbetrieb eine gleitende Auswertung basierend auf dem Status
+      - lambda: |-
+          if (id(calibration_mode).state) {
+            return NAN;
+          } else {
+            float raw_dry = ${soil_moist_raw_dry};
+            float raw_wet = ${soil_moist_raw_wet};
+            float percent = (x - raw_dry) * (100.0 / (raw_wet - raw_dry));
+            if (percent < 0.0) percent = 0.0;
+            if (percent > 100.0) percent = 100.0;
+            return percent;
+          }
+      - median:
+          window_size: ${med_1s_window}
+          send_every: ${med_1s_send_every}
+          send_first_at: ${med_1s_send_first}
+
+  # Analoger Sensor für die elektrische Leitfähigkeit des Bodens (Düngergehalt)
+  - platform: adc
+    pin: 34
+    name: "Boden: 3 Leitfaehigkeit (EC)"
+    id: soil_ec
+    icon: "mdi:lightning-bolt-outline"
+    update_interval: 1s
+    attenuation: 12db
+    unit_of_measurement: "mS/cm"
+    device_class: conductivity
+    on_value:
+      then:
+        - lambda: 'id(text_duenger_index).update();'
+    filters:
+      - filter_out: .nan
+      - lambda: |-
+          if (id(calibration_mode).state) {
+            return NAN;
+          } else {
+            float r[] = {${soil_ec_raw_p0}, ${soil_ec_raw_p1}, ${soil_ec_raw_p2}, ${soil_ec_raw_p3}, ${soil_ec_raw_p4}};
+            float t[] = {${soil_ec_target_p0}, ${soil_ec_target_p1}, ${soil_ec_target_p2}, ${soil_ec_target_p3}, ${soil_ec_target_p4}};
+
+            if (x <= r[0]) return t[0];
+            if (x >= r[4]) return t[4];
+
+            for (int i = 0; i < 4; i++) {
+              if (x >= r[i] && x <= r[i+1]) {
+                return t[i] + (x - r[i]) * ((t[i+1] - t[i]) / (r[i+1] - r[i]));
+              }
+            }
+            return 0.0;
+          }
+      - clamp:
+          min_value: 0.0
+      - median:
+          window_size: ${med_1s_window}
+          send_every: ${med_1s_send_every}
+          send_first_at: ${med_1s_send_first}
+
+text_sensor:
+  # Ein benutzerdefinierter Text-Sensor, der die Sensordaten auswertet
+  - platform: template
+    name: "Boden: 2 Status"
+    id: text_boden_status
+    icon: "mdi:sprout"
+    update_interval: never
+    lambda: |-
+      if (id(calibration_mode).state) return {"KALIBRIERUNG AKTIV"};
+      if (isnan(id(soil_moisture).state)) return {"Sensorfehler"};
+      float m = id(soil_moisture).state;
+      if (m < ${soil_moisture_dry}) return {"Zu trocken - Bitte gießen!"};
+      if (m > ${soil_moisture_wet}) return {"Sehr nass"};
+      return {"Optimal"};
+
+  - platform: template
+    name: "Boden: 4 Duenger-Index (EC)"
+    id: text_duenger_index
+    icon: "mdi:flask-outline"
+    update_interval: never
+    lambda: |-
+      if (id(calibration_mode).state) return {"KALIBRIERUNG AKTIV"};
+      if (isnan(id(soil_ec).state)) return {"Fehler"};
+      float ec = id(soil_ec).state;
+      if (ec < ${soil_ec_low}) return {"Zu wenig Nährstoffe"};
+      if (ec > ${soil_ec_high}) return {"Achtung: Überdüngt!"};
+      return {"Optimal versorgt"};

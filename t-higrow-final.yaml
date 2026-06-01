@@ -1,7 +1,7 @@
 # ==============================================================================
 # PROJEKT: Cannabis Monitor (Garten/Indoor)
 # HARDWARE: LILYGO T-Higrow ESP32 (V1.1 / DHT11)
-# VERSION: 4.6.1
+# VERSION: 4.6.2
 # BESCHREIBUNG:
 #  + Automatische Deep-Sleep-Blockierung bei angeschlossenem Ladegerät (> 4.3V)
 #  + Dynamischer Temperatur-Offset (-0.1°C im Akkubetrieb / +4.5°C im Netzbetrieb)
@@ -50,7 +50,7 @@ substitutions:
 
   # Hardware & Timing
   sensor_power_pin: "4"
-  initial_boot_delay_ms: "20000"
+  initial_boot_delay_ms: "10000"
   deep_sleep_duration: "15min"
 
   # Filter-Logik: 1-Sekunden-Sensoren (Boden, Akku, WLAN)
