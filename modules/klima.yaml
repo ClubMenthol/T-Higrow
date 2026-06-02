@@ -70,7 +70,8 @@ sensor:
     unit_of_measurement: "lx"
 
 # --- BERECHNETE KLIMA-WERTE ---
-# Berechnet den Taupunkt (ab welcher Temperatur bildet sich Kondenswasser/Schimmelgefahr?)
+  # Berechnet den Taupunkt (ab welcher Temperatur bildet sich Kondenswasser/Schimmelgefahr?)
+  # Magnus-Formel
   - platform: template
     name: "Klima: 6 Taupunkt"
     id: taupunkt_value
@@ -89,6 +90,7 @@ sensor:
       return (b * alpha) / (a - alpha);
 
   # Berechnet den VPD (Sättigungsdefizit - Wichtig für die Pflanzenatmung!)
+  # Tetens-Formel
   - platform: template
     name: "Klima: 7 VPD (Dampfdruckdefizit)"
     id: vpd_value

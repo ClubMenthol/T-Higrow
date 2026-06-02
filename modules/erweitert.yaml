@@ -1,0 +1,97 @@
+# ==============================================================================
+# MODUL: ERWEITERT (Version 4.8.0)
+# Berechnungen und virtuelle Sensoren ohne zusätzliche Hardware-Komponenten.
+# Integration von Schimmelwarnung, Lichtsummen-Schätzung und Signalqualität.
+# ==============================================================================
+
+sensor:
+  # --- NEU: WLAN SIGNALQUALITÄT IN PROZENT ---
+  - platform: copy
+    source_id: wifi_signal_dbm # Setzt voraus, dass die ID in system.yaml 'wifi_signal_dbm' heißt oder angepasst wird
+    name: "System: 09 WLAN Signalqualitaet"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    filters:
+      - lambda: |-
+          if (x <= -100.0) return 0.0;
+          if (x >= -50.0) return 100.0;
+          return (x + 100.0) * 2.0;
+
+  # --- NEU: DLI SCHÄTZWERT (DAILY LIGHT INTEGRAL) ---
+  # Berechnet die akkumulierte Lichtmenge basierend auf dem BH1750-Lux-Sensor
+  - platform: template
+    name: "Klima: 9 DLI Schätzwert (Täglich)"
+    id: dli_estimation
+    icon: "mdi:chart-bell-curve-cumulative"
+    unit_of_measurement: "mol/m²/d"
+    accuracy_decimals: 2
+    update_interval: 60s
+    filters:
+      - filter_out: .nan
+    lambda: |-
+      if (isnan(id(light_lux).state)) return NAN;
+      // Berechnung des PPFD-Schätzwertes aus Lux
+      float ppfd = id(light_lux).state * ${lux_to_ppfd_factor};
+      // Umrechnung von µmol/m²/s in mol/m² pro Minute Akkumulation
+      float mol_per_minute = (ppfd * 60.0) / 1000000.0;
+      return mol_per_minute;
+    # Nutzt die ESPHome Total Daily Value Komponente zur automatischen Nullstellung um Mitternacht
+    # Wichtig: Benötigt eine funktionierende sntp-Zeitquelle!
+
+  # --- NEU: HITZE-STRESS TRACKER ---
+  # Zählt die akkumulierten Hitzestunden, wenn die Temperatur über 30°C steigt
+  - platform: template
+    name: "Klima: 9b Hitzestress-Index"
+    id: heat_stress_index
+    icon: "mdi:thermometer-alert"
+    unit_of_measurement: "Min"
+    accuracy_decimals: 1
+    update_interval: 60s
+    lambda: |-
+      if (isnan(id(dht_temp).state)) return id(accum_heat_stress_min);
+      if (id(dht_temp).state > 30.0) {
+        id(accum_heat_stress_min) += 1.0; // 1 Minute addieren bei 60s Intervall
+      }
+      return id(accum_heat_stress_min);
+
+text_sensor:
+  # --- NEU: SCHIMMEL-RISIKO STATUS ---
+  - platform: template
+    name: "Klima: 6b Schimmel-Risiko"
+    id: text_schimmel_risiko
+    icon: "mdi:biohazard"
+    update_interval: 5min
+    lambda: |-
+      if (isnan(id(dht_temp).state) || isnan(id(dht_hum).state) || isnan(id(taupunkt_value).state)) {
+        return {"Fehler"};
+      }
+
+      float temp = id(dht_temp).state;
+      float taupunkt = id(taupunkt_value).state;
+      float hum = id(dht_hum).state;
+      float diff = temp - taupunkt;
+
+      // Kritisch: Hohe relative Feuchte und Temperatur nah am Taupunkt (Gefahr von Kondensat)
+      if (hum > 75.0 && diff < 3.0) {
+        return {"AKUTE GEFAHR (Kondensat)"};
+      }
+      if (hum > 65.0 && diff < 5.0) {
+        return {"Erhöhtes Risiko"};
+      }
+      if (hum > 60.0) {
+        return {"Warnung (Feuchte hoch)"};
+      }
+      return {"Sicher / Keine Gefahr"};
+
+  # --- NEU: PHOTOPERIODEN STATUS ---
+  - platform: template
+    name: "Klima: 5b Photoperiode"
+    id: text_photoperiode_status
+    icon: "mdi:theme-light-dark"
+    update_interval: 10min
+    lambda: |-
+      if (isnan(id(light_lux).state)) return {"Unbekannt"};
+      if (id(light_lux).state < ${light_night}) {
+        return {"Dunkelphase (Nacht)"};
+      }
+      return {"Lichtphase (Tag)"};

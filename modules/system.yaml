@@ -76,6 +76,7 @@ sensor:
   # WLAN Diagnosesensor
   - platform: wifi_signal
     name: "System: 09 WLAN Signalstaerke"
+    id: wifi_signal_dbm
     icon: "mdi:wifi"
     update_interval: 1s
     filters:
@@ -116,7 +117,7 @@ text_sensor:
     id: text_hostname
     icon: "mdi:computer"
     entity_category: diagnostic
-    update_interval: never
+    update_interval: 60s
     lambda: |-
       return {"${devicename}"};
 

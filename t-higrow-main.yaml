@@ -1,7 +1,7 @@
 # ==============================================================================
 # PROJEKT: Cannabis Monitor (Garten/Indoor) - HAUPTSKRIPT
 # HARDWARE: LILYGO T-Higrow ESP32 (V1.1 / DHT11)
-# VERSION: 4.7.0
+# VERSION: 4.8.0
 # BESCHREIBUNG:
 #  * ÄNDERUNG (v4.7.0): Code-Basis modularisiert für GitHub (Packages-Struktur)
 #  * Alle anpassbaren Variablen sind hier zentral gebündelt.
@@ -107,6 +107,10 @@ substitutions:
   light_veg: "2500"
   light_flower: "7000"
 
+  # NEU v4.8.0: Umrechnungsfaktor Lux zu PPFD (Grobwert für Sonnenlicht/Breitband-LED)
+  # 1000 Lux = ca. 18.5 µmol/m²/s
+  lux_to_ppfd_factor: "0.0185"
+
 # Globale Variablen für die dynamische Laufzeitanpassung
 # (müssen im Hauptskript stehen)
 globals:
@@ -118,6 +122,11 @@ globals:
     type: bool
     restore_value: no
     initial_value: "false"
+  # NEU v4.8.0: Speicher für akkumulierte Klimastress-Minuten (überlebt Deep Sleep)
+  - id: accum_heat_stress_min
+    type: float
+    restore_value: yes
+    initial_value: "0.0"
 
 # Grundkonfiguration
 esphome:
@@ -223,3 +232,4 @@ packages:
   klima: !include modules/klima.yaml
   boden: !include modules/boden.yaml
   energie: !include modules/energie.yaml
+  erweitert: !include modules/erweitert.yaml # NEU v4.8.0: Rein rechnerische Erweiterungen
