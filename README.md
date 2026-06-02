@@ -29,3 +29,20 @@ Dein Projektverzeichnis sollte wie folgt aufgebaut sein:
     ├── klima.yaml         # DHT11, BH1750, VPD- & Taupunktberechnung
     ├── boden.yaml         # Kapazitive Bodenfeuchte & EC-Kennlinie
     └── energie.yaml       # ADC-Akkumessung, Prozentberechnung & Ladestatus
+
+🛠️ Schnellstart & Dokumentation
+Für dieses Projekt stehen detaillierte Anleitungen zur Verfügung:
+
+HOWTO.md (Installations- & Einrichtungsanleitung): Erfährst du Schritt für Schritt, wie du die Firmware installierst, deine secrets.yaml konfigurierst und die Sensoren exakt kalibrierst.
+
+MANUAL.md (Bedienungsanleitung & technische Details): Erklärt die Funktionsweise der Schalter, die Logik hinter den VPD-/EC-Grenzwerten und das Verhalten des Deep-Sleep-Modus.
+
+📋 Voraussetzungen (Hardware)
+Board: LILYGO T-Higrow ESP32 (Version 1.1 mit On-Board DHT11)
+
+Zusatz-Sensor (optional): BH1750 I2C Lichtsensor (an den Pins SDA:25 / SCL:26)
+
+Stromversorgung: 18650 Lithium-Ionen-Zelle oder USB-C Netzteil
+
+⚖️ Lizenz & GitHub
+Dieses Projekt ist für die private Nutzung und Optimierung deines Gartens gedacht. Das Teilen und Erweitern der Codebasis ist ausdrücklich erwünscht!
