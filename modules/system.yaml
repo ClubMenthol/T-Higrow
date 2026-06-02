@@ -2,7 +2,7 @@
 # MODUL: SYSTEM (Version 4.7.0)
 # Beinhaltet Deep Sleep, System-Sensoren (WLAN, RAM, Uptime) und Schalter
 # ==============================================================================
-
+ 
 deep_sleep:
   id: deep_sleep_ctrl
   sleep_duration: ${deep_sleep_duration}
