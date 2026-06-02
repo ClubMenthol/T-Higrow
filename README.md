@@ -39,9 +39,9 @@ Dein Projektverzeichnis sollte wie folgt aufgebaut sein:
 🛠️ Schnellstart & Dokumentation
 Für dieses Projekt stehen detaillierte Anleitungen zur Verfügung:
 
-HOWTO.md (Installations- & Einrichtungsanleitung): Erfährst du Schritt für Schritt, wie du die Firmware installierst, deine secrets.yaml konfigurierst und die Sensoren exakt kalibrierst.
+[HOWTO.md](HOWTO.md.md) (Installations- & Einrichtungsanleitung): Erfährst du Schritt für Schritt, wie du die Firmware installierst, deine secrets.yaml konfigurierst und die Sensoren exakt kalibrierst.
 
-MANUAL.md (Bedienungsanleitung & technische Details): Erklärt die Funktionsweise der Schalter, die Logik hinter den VPD-/EC-Grenzwerten und das Verhalten des Deep-Sleep-Modus.
+[MANUAL.md](MANUAL.md) (Bedienungsanleitung & technische Details): Erklärt die Funktionsweise der Schalter, die Logik hinter den VPD-/EC-Grenzwerten und das Verhalten des Deep-Sleep-Modus.
 
 📋 Voraussetzungen (Hardware)
 Board: LILYGO T-Higrow ESP32 (Version 1.1 mit On-Board DHT11)
