@@ -14,6 +14,12 @@ Ein modularer, energieoptimierter IoT-Sensor für die Überwachung von Boden- un
 * **2-Wege-Kalibrierung:** Komfortabler Kalibrierungsmodus über die Weboberfläche, um Rohwerte (Volt) für Bodenfeuchte und die elektrische Leitfähigkeit (EC / Düngergehalt) direkt im Live-Log einzusehen.
 * **Dual-Betriebsmodus:** Automatische Temperaturoffset-Anpassung je nachdem, ob das Gerät per Akku (`-0.1°C`) oder per Dauerstrom (`-4.5°C`) betrieben wird, um die Eigenerwärmung des Boards zu kompensieren.
 
+So sieht das Webinterface aus.
+![Screenshot.](https://github.com/ClubMenthol/T-Higrow/blob/main/screencapture-t-higrow.png)
+
+Der Kalibrierungsmodus ist aktiv. Hier könne die Rohwerte abgelesen werden, die zur Kalibrierung benötigt werden.
+
+![Screenshot.](https://github.com/ClubMenthol/T-Higrow/blob/main/kalibrierung.png)
 ---
 
 ## 📂 Repository-Struktur
