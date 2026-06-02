@@ -3,7 +3,7 @@
 # Berechnungen und virtuelle Sensoren ohne zusätzliche Hardware-Komponenten.
 # Integration von Schimmelwarnung, Lichtsummen-Schätzung und Signalqualität.
 # ==============================================================================
-
+ 
 sensor:
   # --- NEU: WLAN SIGNALQUALITÄT IN PROZENT ---
   - platform: copy
