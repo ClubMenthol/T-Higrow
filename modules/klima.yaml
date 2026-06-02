@@ -2,7 +2,7 @@
 # MODUL: KLIMA (Version 4.7.0)
 # Beinhaltet DHT11, BH1750, VPD-Berechnungen und Klima-Textsensoren
 # ==============================================================================
-
+ 
 sensor:
   # --- KLIMASENSOREN ---
   # Temperatur- und Luftfeuchtigkeitssensor DHT11 (On-Board)
