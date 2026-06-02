@@ -1,22 +1,31 @@
-# ESPHome LILYGO T-Higrow Cannabis Monitor
+# T-Higrow Cannabis Monitor (v4.7.0)
 
-Dieses Repository enthält eine hochentwickelte und optimierte ESPHome-Konfiguration für den **LILYGO T-Higrow ESP32 (V1.1 / DHT11)** zur automatisierten Überwachung von Boden- und Klimawerten in der Pflanzenzucht.
+Ein modularer, energieoptimierter IoT-Sensor für die Überwachung von Boden- und Klimawerten beim Cannabis-Anbau (Garten/Indoor). Das Projekt basiert auf dem **LILYGO T-Higrow ESP32 (V1.1 / DHT11)** Board und nutzt **ESPHome** für eine nahtlose Integration in Home Assistant oder via MQTT.
 
-## Features
-* **Bodenüberwachung:** Kapazitive Feuchtigkeitsmessung und Leitfähigkeit (EC-Wert) mit integrierter Multi-Punkt-Kalibrierung.
-* **Klimaanalyse:** Messung von Temperatur, relativer Luftfeuchtigkeit und Lichtintensität (BH1750).
-* **Erweiterte Berechnungen:** Echtzeitberechnung von absolutem Feuchtigkeitsgehalt, Taupunkt und **VPD (Dampfdruckdefizit)** zur optimalen Vitalitätskontrolle.
-* **Energieeffizient:** Ausgeklügelte Deep-Sleep-Schleife für autarken Akkubetrieb (18650 Zelle) im Außenbereich.
-* **Wartungsmodus:** Integrierter Schalter zur temporären Deaktivierung des Deep Sleep (für problemlose OTA-Updates) sowie ein Live-Kalibrierungsmodus.
 
-## Dateistruktur
-* `t-higrow-final.yaml` - Die ESPHome-Hauptkonfigurationsdatei.
-* `secrets.yaml` (**Nicht im Repository enthalten!**) - Enthält deine lokalen Netzwerk- und Zugangsdaten. Eine Vorlage befindet sich im Skriptcode.
+---
 
-## Installation & Verwendung
-1. Erstelle lokal eine `secrets.yaml` basierend auf den im Skript benötigten Variablen.
-2. Passe deine Schwellenwerte und Hardware-Kalibrierungsdaten direkt im Kopfbereich (Modul 1) der `t-higrow-final.yaml` an.
-3. Kompiliere und flashe das Projekt via ESPHome-Dashboard oder CLI.
+## 💡 Hauptmerkmale (Features)
 
-## Lizenz
-Dieses Projekt ist unter der MIT-Lizenz lizenziert – siehe die [LICENSE](LICENSE) Datei für Details.
+* **Vollständige Modularität (v4.7.0):** Die Konfiguration ist in saubere Sub-Pakete unterteilt (`system`, `klima`, `boden`, `energie`), die sich im Hauptskript flexibel aktivieren oder deaktivieren lassen.
+* **Intelligentes Energiemanagement:** Deep-Sleep-Unterstützung (Standard: 15 Minuten) mit dynamischer Deaktivierung, sobald ein Ladegerät angeschlossen ist, das System im Kalibrierungsmodus läuft oder ein OTA-Update blockiert wird.
+* **Präzise Sensor-Filterung:** Nutzung von ESPHome-Medianfiltern für alle kritischen Analog- und Klimawerte, um Messfehler und Signalrauschen effektiv zu eliminieren.
+* **Erweiterte Klimaberechnungen:** Automatische Ermittlung von **Taupunkt**, **absoluter Luftfeuchtigkeit** und dem **Dampfdruckdefizit (VPD)** inklusive einer dynamischen Text-Statusausgabe für die jeweilige Pflanzenphase.
+* **2-Wege-Kalibrierung:** Komfortabler Kalibrierungsmodus über die Weboberfläche, um Rohwerte (Volt) für Bodenfeuchte und die elektrische Leitfähigkeit (EC / Düngergehalt) direkt im Live-Log einzusehen.
+* **Dual-Betriebsmodus:** Automatische Temperaturoffset-Anpassung je nachdem, ob das Gerät per Akku (`-0.1°C`) oder per Dauerstrom (`-4.5°C`) betrieben wird, um die Eigenerwärmung des Boards zu kompensieren.
+
+---
+
+## 📂 Repository-Struktur
+
+Dein Projektverzeichnis sollte wie folgt aufgebaut sein:
+
+```text
+├── t-higrow-main.yaml     # Hauptskript (Zentrale Variablen & Hardware-Setup)
+├── secrets.yaml           # Deine privaten Netzwerk- & MQTT-Zugangsdaten (lokal)
+├── secrets.yaml-beispiel  # Vorlage für secrets.yaml (wird auf GitHub hochgeladen)
+└── modules/               # Unterverzeichnis für die modularisierten Pakete
+    ├── system.yaml        # Deep Sleep, System-Sensoren (WLAN, RAM, Uptime)
+    ├── klima.yaml         # DHT11, BH1750, VPD- & Taupunktberechnung
+    ├── boden.yaml         # Kapazitive Bodenfeuchte & EC-Kennlinie
+    └── energie.yaml       # ADC-Akkumessung, Prozentberechnung & Ladestatus
