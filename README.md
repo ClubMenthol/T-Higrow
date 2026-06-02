@@ -29,7 +29,7 @@ Dein Projektverzeichnis sollte wie folgt aufgebaut sein:
     ├── klima.yaml         # DHT11, BH1750, VPD- & Taupunktberechnung
     ├── boden.yaml         # Kapazitive Bodenfeuchte & EC-Kennlinie
     └── energie.yaml       # ADC-Akkumessung, Prozentberechnung & Ladestatus
-
+```
 🛠️ Schnellstart & Dokumentation
 Für dieses Projekt stehen detaillierte Anleitungen zur Verfügung:
 
