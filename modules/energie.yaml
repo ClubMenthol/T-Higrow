@@ -2,7 +2,7 @@
 # MODUL: ENERGIE (Version 4.7.0)
 # Beinhaltet Akkuspannung, prozentuale Berechnung und Ladestatus
 # ==============================================================================
-
+ 
 sensor:
   # --- SYSTEM & ENERGIE ---
   # Interner ADC für die Überwachung der 18650 Zelle
