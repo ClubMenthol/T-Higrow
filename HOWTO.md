@@ -87,5 +87,13 @@ P3 (Optimaler Bereich): In feuchte, gut versorgte Qualitäts-Gartenerde stecken 
 
 P4 (Maximalwert): In eine gesättigte Kochsalzlösung tauchen -> Wert bei soil_ec_raw_p4 eintragen.
 
+**_Wichtige Praxistipps für präzise Messungen:_**
+
+* _Gleiche Erde nutzen: Wenn du das Substrat wechselst (z. B. von einer stark vorgedüngten Grow-Erde auf eine sehr luftige Kokos-Leicht-Mischung), verschieben sich die Kalibrierungswerte aufgrund der veränderten Dichte und Salze erneut. Bei einem harten Substratwechsel lohnt sich eine kurze Nachkalibrierung._
+
+* _Erde gut andrücken: Hohlräume oder Luftblasen direkt an der Platinen-Oberfläche verfälschen das Messergebnis massiv (Spannung steigt, Sensor denkt es ist zu trocken). Die Erde muss nach dem Einstecken rings um die Platine fest und bündig anliegen._
+
+* _Einstecktiefe fixieren: Der Sensor misst über die gesamte Länge seiner Leiterbahnen. Wenn das Board im Garten durch Wind oder Tiere gelockert und minimal herausgezogen wird, stimmt die Kalibrierung nicht mehr. Markiere dir die Einstecktiefe am besten mit einem kleinen Strich auf dem Board._
+
 ***4. Werte übernehmen***
 Trage deine ermittelten Werte im Hauptskript t-higrow-main.yaml im Bereich substitutions: unter Kalibrierung ein und flashe das Board erneut. Deaktiviere danach den Kalibrierungsmodus, damit der Deep Sleep wieder greift.
