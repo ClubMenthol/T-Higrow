@@ -87,5 +87,5 @@ P3 (Optimaler Bereich): In feuchte, gut versorgte Qualitäts-Gartenerde stecken 
 
 P4 (Maximalwert): In eine gesättigte Kochsalzlösung tauchen -> Wert bei soil_ec_raw_p4 eintragen.
 
-4. Werte übernehmen
+***4. Werte übernehmen***
 Trage deine ermittelten Werte im Hauptskript t-higrow-main.yaml im Bereich substitutions: unter Kalibrierung ein und flashe das Board erneut. Deaktiviere danach den Kalibrierungsmodus, damit der Deep Sleep wieder greift.
