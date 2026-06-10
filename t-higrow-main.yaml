@@ -1,23 +1,25 @@
 # ==============================================================================
 # PROJEKT: Cannabis Monitor (Garten/Indoor) - HAUPTSKRIPT
 # HARDWARE: LILYGO T-Higrow ESP32 (V1.1 / DHT11)
-# VERSION: 4.8.0
+# VERSION: 4.9.1
 # BESCHREIBUNG:
-#  * ÄNDERUNG (v4.7.0): Code-Basis modularisiert für GitHub (Packages-Struktur)
+#  * Globale DLI-Variable hinzugefügt, Mitternachts-Reset integriert.
+#  * Code-Basis modularisiert (Packages-Struktur)
 #  * Alle anpassbaren Variablen sind hier zentral gebündelt.
 #  * Module lassen sich unter "packages:" am Ende der Datei aktivieren/deaktivieren.
+#  * Update-URL für Dashboard-Import integriert.
 # ==============================================================================
 
 substitutions:
-  # ============================================================================
-  # MODUL 1: KONFIGURIERBARE VARIABLEN & SCHWELLENWERTE
-  # ============================================================================
-  devicename: "t-higrow-garten"
-  friendly_name: "Garten Monitor"
-
+  projekt_version: "4.9.1"
   # ============================================================================
   # ab hier ausschneiden
   # ============================================================================
+  # ============================================================================
+  # MODUL 1: KONFIGURIERBARE VARIABLEN & SCHWELLENWERTE
+  # ============================================================================
+  devicename: !secret devicename
+  friendly_name: !secret friendly_name
   # Netzwerkkonfiguration (Ausgelagert in secrets.yaml für GitHub)
   wifi_ssid: !secret wifi_ssid
   wifi_password: !secret wifi_password
@@ -35,12 +37,17 @@ substitutions:
   # jeweils gültigen werte des eigenen Setup ersetzen
   # ============================================================================
 
+  # Konfigurierbare Zeit für den Tages-Reset (Hitzestress & DLI)
+  reset_time_hours: "0"
+  reset_time_minutes: "0"
+  reset_time_seconds: "0"
+
   # Hardware & Timing
   sensor_power_pin: "4"
   initial_boot_delay_ms: "10000"
   deep_sleep_duration: "15min"
 
-  # Filter-Logik: 1-Sekunden-Sensoren (Boden, Akku, WLAN)
+  # Filter-Logik: 1-Sekunden-Sensoren (Akku, WLAN)
   # Sammelt 31 Werte, sendet den ersten nach 5s (für Akku), danach alle 60s (Dauerbetrieb)
   med_1s_window: "31"
   med_1s_send_first: "5"
@@ -51,6 +58,17 @@ substitutions:
   med_2s_window: "15"
   med_2s_send_first: "3"
   med_2s_send_every: "30"
+
+  # Filter-Logik für bessere glättung der Bodenwerte (Feuchte / EC)
+  # --- 1. MEDIAN FILTER (Ausreißer-Blocker) ---
+  median_window: "5"         # Sammelt 5 Werte für die Auswertung.
+  median_send_first: "3"     # Sendet den ersten Wert nach 3 Messungen (nach ca. 6 Sekunden).
+  median_send_every: "3"     # Sendet alle 6 Sekunden an den nächsten Filter.
+  #
+  # --- 2. MOVING AVERAGE FILTER (Glättung & Intervall) ---
+  ma_window: "30"            # Bildet den Durchschnitt der letzten 30 (bereits vom Median gefilterten) Werte.
+  ma_send_first: "1"         # Reagiert SOFORT auf den allerersten Wert vom Median-Filter (bei Sekunde 6).
+  ma_send_every: "30"        # Sendet danach nur noch alle 30 Werte (ca. 60 Sekunden) an Home Assistant.
 
   # Sensor-Kalibrierung: DHT11
   temp_offset_battery: "-0.1"  # Korrektur Sensorenabwärme im Akkubetrieb
@@ -66,22 +84,22 @@ substitutions:
   # Rohwert-Kalibrierung: Bodenfeuchte (Spannung in Volt)
   # Werte durch eigene ermittelte Werte im Kalibrierungmodus ersetzen.
   #
-  soil_moist_raw_dry: "2.80"        # Median der trockenen Messreihe in der Luft (0%)
-  soil_moist_raw_wet: "1.60"        # Median in Wasser (100%)
+  soil_moist_raw_dry: !secret soil_moist_raw_dry     # Median der trockenen Messreihe in der Luft (0%)
+  soil_moist_raw_wet: !secret soil_moist_raw_wet     # Median in Wasser (100%)
   #
   # Rohwert-Kalibrierung: Dünger / EC
   # Werte durch eigene ermittelte Werte im Kalibrierungmodus ersetzen.
   #
-  soil_ec_raw_p0: "0.14"            # Rohwert für 0.0 mS/cm Sensor trocken / Regenwasser Minimalwert
-  soil_ec_target_p0: "0.0"
-  soil_ec_raw_p1: "0.21"            # Rohwert für 0.3 mS/cm Nasse Torferde (sehr nährstoffarm)
-  soil_ec_target_p1: "0.3"
-  soil_ec_raw_p2: "0.28"            # Rohwert für 0.8 mS/cm Nasse Anzuchterde (leicht gedüngt)
-  soil_ec_target_p2: "0.8"
-  soil_ec_raw_p3: "0.34"            # Rohwert für 1.5 mS/cm Nasse Gartenerde (optimaler Bereich)
-  soil_ec_target_p3: "1.5"
-  soil_ec_raw_p4: "0.55"            # Rohwert für 5.0 mS/cm Gesättigte Salzlösung Maximalwert
-  soil_ec_target_p4: "5.0"
+  soil_ec_raw_p0: !secret soil_ec_raw_p0             # Rohwert für 0.0 mS/cm Sensor trocken / Regenwasser Minimalwert
+  soil_ec_target_p0: !secret soil_ec_target_p0
+  soil_ec_raw_p1: !secret soil_ec_raw_p1             # Rohwert für 0.3 mS/cm Nasse Torferde (sehr nährstoffarm)
+  soil_ec_target_p1: !secret soil_ec_target_p1
+  soil_ec_raw_p2: !secret soil_ec_raw_p2             # Rohwert für 0.8 mS/cm Nasse Anzuchterde (leicht gedüngt)
+  soil_ec_target_p2: !secret soil_ec_target_p2
+  soil_ec_raw_p3: !secret soil_ec_raw_p3             # Rohwert für 1.5 mS/cm Nasse Gartenerde (optimaler Bereich)
+  soil_ec_target_p3: !secret soil_ec_target_p3
+  soil_ec_raw_p4: !secret soil_ec_raw_p4             # Rohwert für 5.0 mS/cm Gesättigte Salzlösung Maximalwert
+  soil_ec_target_p4: !secret soil_ec_target_p4
   #
   # Ende der Kalibrierung
   #
@@ -107,9 +125,24 @@ substitutions:
   light_veg: "2500"
   light_flower: "7000"
 
-  # NEU v4.8.0: Umrechnungsfaktor Lux zu PPFD (Grobwert für Sonnenlicht/Breitband-LED)
+  # Umrechnungsfaktor Lux zu PPFD (Grobwert für Sonnenlicht/Breitband-LED)
   # 1000 Lux = ca. 18.5 µmol/m²/s
   lux_to_ppfd_factor: "0.0185"
+
+  # in diesem Bereich können verschiedenen Boards anhand des MAC sufixes
+  # namen zugewiesen werden. diese werden in der pflanzen_mapping.yaml ausgewertet.
+  # Board 1 Konfiguration
+  mac_p1: !secret mac_p1
+  name_p1: !secret name_p1
+  #
+  # Board 2 Konfiguration
+  mac_p2: !secret mac_p2
+  name_p2: !secret name_p2
+  #
+  #
+
+  # Update- & Dashboard-Import-Pfad (Verweist auf das öffentliche Repository)  # <-- NEU
+  update_url: "github://ClubMenthol/T-Higrow/t-higrow-main.yaml@main"
 
 # Globale Variablen für die dynamische Laufzeitanpassung
 # (müssen im Hauptskript stehen)
@@ -122,16 +155,30 @@ globals:
     type: bool
     restore_value: no
     initial_value: "false"
-  # NEU v4.8.0: Speicher für akkumulierte Klimastress-Minuten (überlebt Deep Sleep)
+  # Speicher für akkumulierte Klimastress-Minuten (überlebt Deep Sleep)
   - id: accum_heat_stress_min
     type: float
     restore_value: yes
     initial_value: "0.0"
+  # Speicher für akkumulierten DLI-Wert hinzugefügt
+  - id: accum_dli
+    type: float
+    restore_value: yes
+    initial_value: "0.0"
+
+# Dashboard-Import ermöglicht automatische Updates im ESPHome-Dashboard
+dashboard_import:
+  package_import_url: ${update_url}
+  import_full_config: false
 
 # Grundkonfiguration
 esphome:
   name: ${devicename}
   friendly_name: ${friendly_name}
+  name_add_mac_suffix: true
+  project:
+    name: "ClubMenthol.T-Higrow"
+    version: ${projekt_version}
   on_boot:
     # Hardware-Initialisierung VOR dem I2C-Bus (Priorität 1200)
     - priority: 1200
@@ -148,6 +195,14 @@ esphome:
     - priority: 800
       then:
         - switch.turn_on: sensor_power
+    # Pflanzen Mapping aktivieren
+    - priority: 600
+      then:
+        - lambda: 'id(text_pflanze_name).update();'
+    # Hostnamen auslösen
+    - priority: 600
+      then:
+        - lambda: 'id(text_hostname).update();'
 
   # Deep Sleep Logik Schleife aktiviert
   on_loop:
@@ -159,6 +214,9 @@ esphome:
               - switch.is_off: block_deep_sleep
               - switch.is_off: calibration_mode
               - lambda: 'return !id(is_powered);'
+              # Wartet dynamisch, bis der Temperatursensor (und damit die Filterkette) einen gültigen Wert hat
+              - lambda: 'return id(dht_temp).has_state();'
+              # Dient als Mindestwartezeit (Fallback)
               - lambda: 'return millis() > ${initial_boot_delay_ms};'
           then:
             - deep_sleep.enter: deep_sleep_ctrl
@@ -217,6 +275,15 @@ time:
     on_time_sync:
       then:
         - lambda: 'id(text_letztes_update).update();'
+        # Automatischer Reset der Tageswerte (DLI & Hitzestress)
+    on_time:
+      - seconds: ${reset_time_seconds}
+        minutes: ${reset_time_minutes}
+        hours: ${reset_time_hours}
+        then:
+          - lambda: |-
+              id(accum_dli) = 0.0;
+              id(accum_heat_stress_min) = 0.0;
 i2c:
   sda: 25
   scl: 26
@@ -224,7 +291,7 @@ i2c:
   frequency: 100kHz
 
 # ==============================================================================
-# ÄNDERUNG (v4.7.0): PACKAGES (MODUL-VERWALTUNG)
+# PACKAGES (MODUL-VERWALTUNG)
 # Hier kannst du einzelne Module ein- oder ausschalten, indem du sie mit # auskommentierst
 # ==============================================================================
 packages:
@@ -232,4 +299,5 @@ packages:
   klima: !include modules/klima.yaml
   boden: !include modules/boden.yaml
   energie: !include modules/energie.yaml
-  erweitert: !include modules/erweitert.yaml # NEU v4.8.0: Rein rechnerische Erweiterungen
+  erweitert: !include modules/erweitert.yaml # Rein rechnerische Erweiterungen
+  pflanzen_mapping: !include modules/pflanzen_mapping.yaml

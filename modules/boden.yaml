@@ -1,6 +1,7 @@
 # ==============================================================================
-# MODUL: BODEN (Version 4.8.0)
+# MODUL: BODEN (Version 4.9.1)
 # Beinhaltet Bodenfeuchte und Leitfähigkeit (EC/Dünger)
+# filter_out Syntax von NAN auf NAN korrigiert.
 # ==============================================================================
 
 sensor:
@@ -20,11 +21,11 @@ sensor:
       then:
         - lambda: 'id(text_boden_status).update();'
     filters:
-      - filter_out: .nan
+      - filter_out: NAN
       # Nutzt im Dauerbetrieb eine gleitende Auswertung basierend auf dem Status
       - lambda: |-
           if (id(calibration_mode).state) {
-            return NAN;
+            return {};
           } else {
             float raw_dry = ${soil_moist_raw_dry};
             float raw_wet = ${soil_moist_raw_wet};
@@ -33,10 +34,17 @@ sensor:
             if (percent > 100.0) percent = 100.0;
             return percent;
           }
+      # Filterkette Schritt 1: Extreme Fehlmessungen (Spikes) entfernen
       - median:
-          window_size: ${med_1s_window}
-          send_every: ${med_1s_send_every}
-          send_first_at: ${med_1s_send_first}
+          window_size: ${median_window}
+          send_first_at: ${median_send_first}
+          send_every: ${median_send_every}
+
+      # Filterkette Schritt 2: Verbleibende Werte glätten und Sende-Intervall drosseln
+      - sliding_window_moving_average:
+          window_size: ${ma_window}
+          send_first_at: ${ma_send_first}
+          send_every: ${ma_send_every}
 
   # Analoger Sensor für die elektrische Leitfähigkeit des Bodens (Düngergehalt)
   - platform: adc
@@ -52,10 +60,10 @@ sensor:
       then:
         - lambda: 'id(text_duenger_index).update();'
     filters:
-      - filter_out: .nan
+      - filter_out: NAN
       - lambda: |-
           if (id(calibration_mode).state) {
-            return NAN;
+            return {};
           } else {
             float r[] = {${soil_ec_raw_p0}, ${soil_ec_raw_p1}, ${soil_ec_raw_p2}, ${soil_ec_raw_p3}, ${soil_ec_raw_p4}};
             float t[] = {${soil_ec_target_p0}, ${soil_ec_target_p1}, ${soil_ec_target_p2}, ${soil_ec_target_p3}, ${soil_ec_target_p4}};
@@ -73,9 +81,14 @@ sensor:
       - clamp:
           min_value: 0.0
       - median:
-          window_size: ${med_1s_window}
-          send_every: ${med_1s_send_every}
-          send_first_at: ${med_1s_send_first}
+          window_size: ${median_window}
+          send_first_at: ${median_send_first}
+          send_every: ${median_send_every}
+
+      - sliding_window_moving_average:
+          window_size: ${ma_window}
+          send_first_at: ${ma_send_first}
+          send_every: ${ma_send_every}
 
 text_sensor:
   # Ein benutzerdefinierter Text-Sensor, der die Sensordaten auswertet

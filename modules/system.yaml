@@ -1,6 +1,7 @@
 # ==============================================================================
-# MODUL: SYSTEM (Version 4.7.0)
+# MODUL: SYSTEM (Version 4.9.1)
 # Beinhaltet Deep Sleep, System-Sensoren (WLAN, RAM, Uptime) und Schalter
+# Versionsnummer nachgeführt.
 # ==============================================================================
  
 deep_sleep:
@@ -117,7 +118,7 @@ text_sensor:
     id: text_hostname
     icon: "mdi:computer"
     entity_category: diagnostic
-    update_interval: 60s
+    update_interval: never
     lambda: |-
       return {"${devicename}"};
 

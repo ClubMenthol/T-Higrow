@@ -1,6 +1,7 @@
 # ==============================================================================
-# MODUL: ENERGIE (Version 4.7.0)
+# MODUL: ENERGIE (Version 4.9.1)
 # Beinhaltet Akkuspannung, prozentuale Berechnung und Ladestatus
+# filter_out Syntax von .nan auf NAN korrigiert.
 # ==============================================================================
  
 sensor:
@@ -18,7 +19,7 @@ sensor:
       then:
         - lambda: 'id(text_akku_zustand).update();'
     filters:
-      - filter_out: .nan
+      - filter_out: NAN
       # Hardware-Spannungsteiler auf dem Board erfordert Multiplikator
       - multiply: 2.0
       - median:
@@ -35,7 +36,7 @@ sensor:
     unit_of_measurement: "%"
     device_class: battery
     filters:
-      - filter_out: .nan
+      - filter_out: NAN
       # Kalibrierung von Spannung zu Prozent (Lithium-Ionen Entladekurve grob angenähert)
       - calibrate_linear:
           - 3.51 -> 0.0 # unterhalb dieser Spannung liefern die Sensoren falsche werte

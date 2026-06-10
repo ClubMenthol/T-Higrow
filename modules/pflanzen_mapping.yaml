@@ -1,0 +1,30 @@
+# ==============================================================================
+# MODUL: PFLANZEN MAPPING (Version 4.9.1)
+# Zuweisung von Klarnamen basierend auf dem MAC-Suffix des Boards.
+# Dieses Modul läuft vollautomatisch auf allen Boards ohne manuelle Namensänderung.
+# ==============================================================================
+
+text_sensor:
+  - platform: template
+    name: "Ausgewählte Pflanze"
+    id: text_pflanze_name
+    icon: "mdi:tag-outline"
+    # Aktualisiert sich nach dem Booten und bleibt dann statisch
+    update_interval: never
+    lambda: |-
+      // ========================================================================
+      // ANPASSBARE VARIABLEN / MAPPING
+      // Hier einfach neue Suffixe eintragen, um weitere Pflanzen zuzuweisen
+      // ========================================================================
+      std::string current_device = esphome::App.get_name();
+
+      // --- ÄNDERUNG: C++ Code wertet nun die Variablen aus dem Substitutions-Block aus ---
+      if (current_device.find("${mac_p1}") != std::string::npos) {
+        return {"${name_p1}"};
+      }
+      if (current_device.find("${mac_p2}") != std::string::npos) {
+        return {"${name_p2}"};
+      }
+
+      // Fallback für den Fall, dass ein neues Board noch nicht eingetragen ist
+      return {"Unbekannte Pflanze"};

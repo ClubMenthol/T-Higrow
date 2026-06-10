@@ -1,6 +1,7 @@
 # ==============================================================================
-# MODUL: KLIMA (Version 4.7.0)
+# MODUL: KLIMA (Version 4.9.1)
 # Beinhaltet DHT11, BH1750, VPD-Berechnungen und Klima-Textsensoren
+# filter_out Syntax von .nan auf NAN korrigiert.
 # ==============================================================================
  
 sensor:
@@ -21,7 +22,7 @@ sensor:
               id(vpd_value).update();
               id(abs_hum_value).update();
       filters:
-        - filter_out: .nan
+        - filter_out: NAN
         - lambda: "return x + id(current_temp_offset);"
         - lambda: |-
             if (x < ${temp_min} || x > ${temp_max}) {
@@ -37,7 +38,7 @@ sensor:
       id: dht_hum
       icon: "mdi:cloud-percent"
       filters:
-        - filter_out: .nan
+        - filter_out: NAN
         - lambda: |-
             if (x < ${hum_min} || x > ${hum_max}) {
               return {};
@@ -61,7 +62,7 @@ sensor:
       then:
         - lambda: 'id(text_licht_status).update();'
     filters:
-      - filter_out: .nan
+      - filter_out: NAN
       - median:
           window_size: ${med_2s_window}
           send_every: ${med_2s_send_every}
@@ -79,7 +80,7 @@ sensor:
     unit_of_measurement: "°C"
     update_interval: never
     filters:
-      - filter_out: .nan
+      - filter_out: NAN
     lambda: |-
       if (isnan(id(dht_temp).state) || isnan(id(dht_hum).state)) return NAN;
       float t = id(dht_temp).state;
@@ -101,7 +102,7 @@ sensor:
       then:
         - lambda: 'id(text_vpd_status).update();'
     filters:
-      - filter_out: .nan
+      - filter_out: NAN
     lambda: |-
       if (isnan(id(dht_temp).state) || isnan(id(dht_hum).state)) return NAN;
       float t = id(dht_temp).state;
@@ -118,7 +119,7 @@ sensor:
     unit_of_measurement: "g/m³"
     update_interval: never
     filters:
-      - filter_out: .nan
+      - filter_out: NAN
     lambda: |-
       if (isnan(id(dht_temp).state) || isnan(id(dht_hum).state)) return NAN;
       float t = id(dht_temp).state;
