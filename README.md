@@ -4,7 +4,7 @@ Ein modularer ESPHome-Multisensor auf Basis des **LILYGO T-Higrow ESP32 Boards**
 
 [![ESPHome Version](https://img.shields.io/badge/ESPHome-v4.9.6-brightgreen.svg)](https://esphome.io/)
 [![Hardware](https://img.shields.io/badge/Hardware-LILYGO_T--Higrow_ESP32-blue.svg)](https://github.com/ClubMenthol/T-Higrow)
-[![License](https://img.shields.io/badge/License-MIT-orange.svg)](#)
+[![License](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
 
 ---
 
