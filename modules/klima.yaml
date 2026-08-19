@@ -1,5 +1,5 @@
 # ==============================================================================
-# MODUL: KLIMA (Version 4.9.1)
+# MODUL: KLIMA (Version 4.9.6)
 # Beinhaltet DHT11, BH1750, VPD-Berechnungen und Klima-Textsensoren
 # filter_out Syntax von .nan auf NAN korrigiert.
 # ==============================================================================
@@ -67,7 +67,7 @@ sensor:
           window_size: ${med_2s_window}
           send_every: ${med_2s_send_every}
           send_first_at: ${med_2s_send_first}
-      - multiply: 1.0
+      - multiply: ${bh1750_multiplikator}
     unit_of_measurement: "lx"
 
 # --- BERECHNETE KLIMA-WERTE ---

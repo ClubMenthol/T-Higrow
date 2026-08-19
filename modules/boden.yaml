@@ -1,9 +1,22 @@
 # ==============================================================================
-# MODUL: BODEN (Version 4.9.1)
+# MODUL: BODEN (Version 4.9.6)
 # Beinhaltet Bodenfeuchte und Leitfähigkeit (EC/Dünger)
-# filter_out Syntax von NAN auf NAN korrigiert.
+#
+# ÄNDERUNGSHISTORIE / VERSIONIERUNG:
+# - Version 4.9.1: filter_out Syntax von NAN auf NAN korrigiert.
+# - Version 4.9.2: FIX - Rückgabewert im Kalibrierungsmodus für Bodenfeuchte von {} auf x geändert.
 # ==============================================================================
-
+#
+# ANPASSBARE VARIABLEN FÜR DIESES MODUL (Definiert in der main.yaml / secrets.yaml):
+# - soil_moist_raw_dry (Rohwert trocken)
+# - soil_moist_raw_wet (Rohwert nass)
+# - soil_ec_raw_p0 bis p4 (Rohwerte EC-Kalibrierung)
+# - soil_ec_target_p0 bis p4 (Zielwerte EC-Kalibrierung)
+# - median_window, median_send_first, median_send_every (Median-Filter)
+# - ma_window, ma_send_first, ma_send_every (Moving Average Filter)
+# - soil_moisture_dry, soil_moisture_wet (Schwellenwerte Status-Text)
+# - soil_ec_low, soil_ec_high (Schwellenwerte EC Status-Text)
+# ==============================================================================
 sensor:
   # --- BODENSENSOREN ---
   # Analoger Sensor für die kapazitive Bodenfeuchte
@@ -25,7 +38,7 @@ sensor:
       # Nutzt im Dauerbetrieb eine gleitende Auswertung basierend auf dem Status
       - lambda: |-
           if (id(calibration_mode).state) {
-            return {};
+            return x;
           } else {
             float raw_dry = ${soil_moist_raw_dry};
             float raw_wet = ${soil_moist_raw_wet};
@@ -61,23 +74,33 @@ sensor:
         - lambda: 'id(text_duenger_index).update();'
     filters:
       - filter_out: NAN
+      # {+++ START ÄNDERUNG: Flexibles Lambda statt statischem calibrate_linear +++}
       - lambda: |-
+          // Wenn der Kalibriermodus aktiv ist, gib den reinen Rohwert (x) aus
           if (id(calibration_mode).state) {
-            return {};
+            return x;
           } else {
+            // Arrays für Roh- und Zielwerte aus den Substitutions laden
             float r[] = {${soil_ec_raw_p0}, ${soil_ec_raw_p1}, ${soil_ec_raw_p2}, ${soil_ec_raw_p3}, ${soil_ec_raw_p4}};
             float t[] = {${soil_ec_target_p0}, ${soil_ec_target_p1}, ${soil_ec_target_p2}, ${soil_ec_target_p3}, ${soil_ec_target_p4}};
 
+            // Werte außerhalb der Grenzen abfangen (Sättigung/Untersteuerung)
             if (x <= r[0]) return t[0];
             if (x >= r[4]) return t[4];
 
+            // Stückweise lineare Interpolation zwischen den 5 Punkten (4 Intervalle)
             for (int i = 0; i < 4; i++) {
-              if (x >= r[i] && x <= r[i+1]) {
-                return t[i] + (x - r[i]) * ((t[i+1] - t[i]) / (r[i+1] - r[i]));
+              if (x >= r[i] && x < r[i+1]) {
+                // Mathematische Formel für die Steigung im aktuellen Intervall
+                float divisor = r[i+1] - r[i];
+                if (divisor == 0.0f) return t[i]; // Division durch 0 verhindern
+
+                return t[i] + (x - r[i]) * ((t[i+1] - t[i]) / divisor);
               }
             }
-            return 0.0;
+            return 0.0; // Fallback
           }
+      # {--- ENDE ÄNDERUNG ---}
       - clamp:
           min_value: 0.0
       - median:

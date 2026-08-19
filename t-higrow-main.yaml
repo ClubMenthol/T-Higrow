@@ -1,17 +1,21 @@
 # ==============================================================================
 # PROJEKT: Cannabis Monitor (Garten/Indoor) - HAUPTSKRIPT
 # HARDWARE: LILYGO T-Higrow ESP32 (V1.1 / DHT11)
-# VERSION: 4.9.1
+# VERSION: 4.9.6
 # BESCHREIBUNG:
 #  * Globale DLI-Variable hinzugefügt, Mitternachts-Reset integriert.
 #  * Code-Basis modularisiert (Packages-Struktur)
 #  * Alle anpassbaren Variablen sind hier zentral gebündelt.
 #  * Module lassen sich unter "packages:" am Ende der Datei aktivieren/deaktivieren.
 #  * Update-URL für Dashboard-Import integriert.
+#  * WLAN BSSID Mapping für Klarnamen der Access Points hinzugefügt.
+#  * Version 4.9.5: BSSID-Mapping-Logik (MAC-Adressen) aus Datenschutzgründen in die secrets.yaml ausgelagert.
+#  * Version 4.9.6: Notfall-Timeout (Fallback) für Deep Sleep hinzugefügt, falls MQTT ausfällt.
 # ==============================================================================
 
 substitutions:
-  projekt_version: "4.9.1"
+  projekt_version: "4.9.6"
+  wifi_signal_id: "wifi_signal_dbm"
   # ============================================================================
   # ab hier ausschneiden
   # ============================================================================
@@ -20,7 +24,7 @@ substitutions:
   # ============================================================================
   devicename: !secret devicename
   friendly_name: !secret friendly_name
-  # Netzwerkkonfiguration (Ausgelagert in secrets.yaml für GitHub)
+  # Netzwerkkonfiguration (Ausgelagert in secrets.yaml)
   wifi_ssid: !secret wifi_ssid
   wifi_password: !secret wifi_password
   wifi_bssid: !secret wifi_bssid
@@ -37,6 +41,13 @@ substitutions:
   # jeweils gültigen werte des eigenen Setup ersetzen
   # ============================================================================
 
+  #
+  # Zuweisung in secrets.yaml ausgelagert
+  # Zuweisung von Repeater-Namen, Standorten und Frequenzen anhand der WLAN BSSID.
+  # Zum Schutz von Privatsphäre/MAC-Adressen auf GitHub als Secret deklariert.
+  bssid_mapping_logic: !secret bssid_mapping_logic
+  #
+
   # Konfigurierbare Zeit für den Tages-Reset (Hitzestress & DLI)
   reset_time_hours: "0"
   reset_time_minutes: "0"
@@ -45,6 +56,7 @@ substitutions:
   # Hardware & Timing
   sensor_power_pin: "4"
   initial_boot_delay_ms: "10000"
+  fallback_timeout_ms: "60000" # Timeout (60s), nach dem das Board gezwungen wird zu schlafen
   deep_sleep_duration: "15min"
 
   # Filter-Logik: 1-Sekunden-Sensoren (Akku, WLAN)
@@ -121,13 +133,25 @@ substitutions:
 
   # Schwellenwerte: Licht (in Lux)
   light_night: "15"
-  light_seed: "500"
-  light_veg: "2500"
-  light_flower: "7000"
+  light_seed: "15000"
+  light_veg: "40000"
+  light_flower: "75000"
 
+  #
+  # bh1750 Multiplikator um die angezeigten Lux Werte anzupassen.
+  bh1750_multiplikator: "50"
   # Umrechnungsfaktor Lux zu PPFD (Grobwert für Sonnenlicht/Breitband-LED)
   # 1000 Lux = ca. 18.5 µmol/m²/s
-  lux_to_ppfd_factor: "0.0185"
+  # lux_to_ppfd_factor: "0.0185"
+  #
+  # Umrechnungsfaktor Lux zu PPFD für Metallhalogenid (MH)
+  # 1000 Lux = ca. 14.1 µmol/m²/s
+  lux_to_ppfd_factor: "0.0141"
+  #
+  # Umrechnungsfaktor Lux zu PPFD für Natriumdampflampe (NDL)
+  # 1000 Lux = ca. 12.2 µmol/m²/s
+  #lux_to_ppfd_factor: "0.0122"
+  #
 
   # in diesem Bereich können verschiedenen Boards anhand des MAC sufixes
   # namen zugewiesen werden. diese werden in der pflanzen_mapping.yaml ausgewertet.
@@ -140,6 +164,14 @@ substitutions:
   name_p2: !secret name_p2
   #
   #
+  # Zentrale Mapping Logik ausgelagert aus pflanzen_mapping.yaml +++}
+  # Wenn neue Boards dazukommen, einfach hier eine Zeile hinzufügen!
+  plant_mapping_logic: |-
+    std::string current_device = esphome::App.get_name();
+    if (current_device.find("${mac_p1}") != std::string::npos) return {"${name_p1}"};
+    if (current_device.find("${mac_p2}") != std::string::npos) return {"${name_p2}"};
+    return {"Unbekannte Pflanze"};
+  # {--- ENDE ÄNDERUNG ---}
 
   # Update- & Dashboard-Import-Pfad (Verweist auf das öffentliche Repository)  # <-- NEU
   update_url: "github://ClubMenthol/T-Higrow/t-higrow-main.yaml@main"
@@ -176,6 +208,9 @@ esphome:
   name: ${devicename}
   friendly_name: ${friendly_name}
   name_add_mac_suffix: true
+  platformio_options:
+    build_flags:
+      - -DCONFIG_OPTIMIZATION_ASSERTIONS_SILENT=y # Entfernt die langen Pfad-Strings aus dem RAM
   project:
     name: "ClubMenthol.T-Higrow"
     version: ${projekt_version}
@@ -205,21 +240,31 @@ esphome:
         - lambda: 'id(text_hostname).update();'
 
   # Deep Sleep Logik Schleife aktiviert
+  # {+++ START ÄNDERUNG: Fallback OR Logik implementiert +++}
   on_loop:
     then:
       - if:
           condition:
-            and:
-              - mqtt.connected:
-              - switch.is_off: block_deep_sleep
-              - switch.is_off: calibration_mode
-              - lambda: 'return !id(is_powered);'
-              # Wartet dynamisch, bis der Temperatursensor (und damit die Filterkette) einen gültigen Wert hat
-              - lambda: 'return id(dht_temp).has_state();'
-              # Dient als Mindestwartezeit (Fallback)
-              - lambda: 'return millis() > ${initial_boot_delay_ms};'
+            or:
+              # Bedingung 1: Regulärer Betrieb (MQTT da, Sensoren stabil)
+              - and:
+                  - mqtt.connected:
+                  - switch.is_off: block_deep_sleep
+                  - switch.is_off: calibration_mode
+                  - lambda: 'return !id(is_powered);'
+                  # Wartet dynamisch, bis der Temperatursensor (und damit die Filterkette) einen gültigen Wert hat
+                  - lambda: 'return id(dht_temp).has_state();'
+                  # Dient als Mindestwartezeit (Fallback)
+                  - lambda: 'return millis() > ${initial_boot_delay_ms};'
+              # Bedingung 2: Notfall-Fallback (Timeout erreicht, Akku retten)
+              - and:
+                  - switch.is_off: block_deep_sleep
+                  - switch.is_off: calibration_mode
+                  - lambda: 'return !id(is_powered);'
+                  - lambda: 'return millis() > ${fallback_timeout_ms};'
           then:
             - deep_sleep.enter: deep_sleep_ctrl
+  # {--- ENDE ÄNDERUNG ---}
 
 esp32:
   board: esp32dev
@@ -234,9 +279,9 @@ wifi:
   networks:
     - ssid: ${wifi_ssid}
       password: ${wifi_password}
-      bssid: ${wifi_bssid}
+      bssid: ${wifi_bssid} # aktivieren, um start zu beschleunigen
   power_save_mode: NONE
-  fast_connect: true
+  fast_connect: true # auf true setzen, um start zu beschleunigen
   manual_ip:
     static_ip: ${manual_static_ip}
     gateway: ${manual_gateway}

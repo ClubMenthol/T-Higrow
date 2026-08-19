@@ -1,7 +1,8 @@
 # ==============================================================================
-# MODUL: SYSTEM (Version 4.9.1)
+# MODUL: SYSTEM (Version 4.9.6)
 # Beinhaltet Deep Sleep, System-Sensoren (WLAN, RAM, Uptime) und Schalter
 # Versionsnummer nachgeführt.
+# AP Name Mapping (BSSID Auswertung) hinzugefügt.
 # ==============================================================================
  
 deep_sleep:
@@ -106,9 +107,24 @@ text_sensor:
     bssid:
       name: "System: 08 Verbindung (BSSID)"
       icon: "mdi:access-point-network"
+      id: wifi_bssid_sensor
+      on_value:
+        then:
+          - lambda: 'id(text_ap_name).update();'
     mac_address:
       name: "System: 05 MAC-Adresse"
       icon: "mdi:chip"
+
+  - platform: template
+    name: "System: 08b Verbindung (AP Name)"
+    id: text_ap_name
+    icon: "mdi:router-wireless"
+    entity_category: diagnostic
+    # Aktualisierung erfolgt Event-gesteuert über on_value des BSSID-Sensors
+    update_interval: never
+    lambda: |-
+      if (id(wifi_bssid_sensor).state == "") return {"Nicht verbunden"};
+      ${bssid_mapping_logic}
 
   - platform: version
     name: "System: 01 ESPHome Version"

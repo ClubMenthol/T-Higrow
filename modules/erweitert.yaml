@@ -1,5 +1,5 @@
 # ==============================================================================
-# MODUL: ERWEITERT (Version 4.9.1)
+# MODUL: ERWEITERT (Version 4.9.6)
 # Berechnungen und virtuelle Sensoren ohne zusätzliche Hardware-Komponenten.
 # Integration von Schimmelwarnung, Lichtsummen-Schätzung und Signalqualität.
 # Logikfehler in der DLI-Berechnung behoben (Akkumulation ergänzt).
@@ -8,7 +8,7 @@
 sensor:
   # ---  WLAN SIGNALQUALITÄT IN PROZENT ---
   - platform: copy
-    source_id: wifi_signal_dbm # Setzt voraus, dass die ID in system.yaml 'wifi_signal_dbm' heißt oder angepasst wird
+    source_id: ${wifi_signal_id} # Setzt voraus, dass die ID in system.yaml 'wifi_signal_dbm' heißt oder angepasst wird
     name: "System: 09 WLAN Signalqualitaet"
     unit_of_measurement: "%"
     accuracy_decimals: 0

@@ -1,5 +1,5 @@
 # ==============================================================================
-# MODUL: ENERGIE (Version 4.9.1)
+# MODUL: ENERGIE (Version 4.9.6)
 # Beinhaltet Akkuspannung, prozentuale Berechnung und Ladestatus
 # filter_out Syntax von .nan auf NAN korrigiert.
 # ==============================================================================
@@ -66,6 +66,6 @@ text_sensor:
         if (v > 4.0) return {"Vollständig geladen"};
         if (v > 3.7) return {"Gut"};
         if (v > 3.6) return {"Bald nachladen"};
-        if (v > 3.5) return {"falsche Sensordaten"};
+        if (v > 3.5) return {"Spannung zu niedrig liefert falsche Sensordaten"};
         return {"Kritisch leer!"};
       }

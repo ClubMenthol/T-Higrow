@@ -6,8 +6,8 @@ Derzeit wird nur die jeweils aktuellste Version im `main`-Branch aktiv mit Siche
 
 | Version | Unterstützt |
 | ------- | ----------- |
-| v4.3.x  | ✅ Ja       |
-| < v4.3  | ❌ Nein      |
+| v4.9.x  | ✅ Ja       |
+| < v4.8  | ❌ Nein      |
 
 ## Melden einer Sicherheitslücke
 
